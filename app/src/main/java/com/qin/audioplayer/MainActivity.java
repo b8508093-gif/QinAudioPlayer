@@ -148,8 +148,8 @@ public class MainActivity extends Activity {
         txtCurrentFile.setText(file.getName());
         try {
             if (audioPlayer != null) audioPlayer.stop();
-            currentSpeed = prefs.getFloat(file.getAbsolutePath() + "_speed", 1.0f);
-            currentSpeed = Math.max(0.5f, Math.min(2.5f, currentSpeed));
+            currentSpeed = prefs.getFloat(file.getAbsolutePath() + "_speed", currentSpeed);
+            currentSpeed = Math.max(0.5f, Math.min(5.0f, currentSpeed));
             txtSpeed.setText("מהירות: " + currentSpeed + "x");
             int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
             audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
@@ -163,15 +163,18 @@ public class MainActivity extends Activity {
                 @Override public void onCompleted() {
                     isPlaying = false;
                     audioPlayer = null;
+                    PlaybackKeepAliveService.stop(MainActivity.this);
                     playNextInDir();
                 }
                 @Override public void onError(Exception error) {
                     isPlaying = false;
                     audioPlayer = null;
+                    PlaybackKeepAliveService.stop(MainActivity.this);
                     Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
             audioPlayer.start(savedPos);
+            PlaybackKeepAliveService.start(this, file.getName());
             isPlaying = true;
             prefs.edit().putString("last_played", file.getAbsolutePath()).apply();
         } catch (Exception e) {
@@ -187,6 +190,7 @@ public class MainActivity extends Activity {
     private void pauseAudio() {
         if (audioPlayer != null && isPlaying) {
             audioPlayer.pause();
+            PlaybackKeepAliveService.stop(this);
             isPlaying = false;
             saveCurrentPosition();
         }
@@ -195,6 +199,7 @@ public class MainActivity extends Activity {
     private void resumeWithSmartJump() {
         if (audioPlayer != null && !isPlaying) {
             audioPlayer.resume();
+            PlaybackKeepAliveService.start(this, currentAudioFile == null ? "ניגון מוזיקה" : currentAudioFile.getName());
             isPlaying = true;
         } else if (currentAudioFile != null) {
             playAudioFile(currentAudioFile);
@@ -212,7 +217,8 @@ public class MainActivity extends Activity {
         if (fileList == null || currentAudioFile == null) return;
         for (int i = 0; i < fileList.size(); i++) {
             if (fileList.get(i).equals(currentAudioFile)) {
-                for (int j = i + 1; j < fileList.size(); j++) {
+                for (int step = 1; step < fileList.size(); step++) {
+                    int j = (i + step) % fileList.size();
                     if (isAudioFile(fileList.get(j))) {
                         playAudioFile(fileList.get(j));
                         listView.setSelection(j);
@@ -228,7 +234,8 @@ public class MainActivity extends Activity {
         if (fileList == null || currentAudioFile == null) return;
         for (int i = 0; i < fileList.size(); i++) {
             if (fileList.get(i).equals(currentAudioFile)) {
-                for (int j = i - 1; j >= 0; j--) {
+                for (int step = 1; step < fileList.size(); step++) {
+                    int j = (i - step + fileList.size()) % fileList.size();
                     if (isAudioFile(fileList.get(j))) {
                         playAudioFile(fileList.get(j));
                         listView.setSelection(j);
@@ -300,7 +307,7 @@ public class MainActivity extends Activity {
 
             case KeyEvent.KEYCODE_7:
                 if (currentSpeed > 0.5f) {
-                    currentSpeed = Math.round((currentSpeed - 0.1f) * 10f) / 10f;
+                    currentSpeed = Math.max(0.5f, Math.round((currentSpeed - 0.1f) * 10f) / 10f);
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                     if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
                     saveCurrentPosition();
@@ -308,8 +315,8 @@ public class MainActivity extends Activity {
                 return true;
 
             case KeyEvent.KEYCODE_9:
-                if (currentSpeed < 2.5f) {
-                    currentSpeed = Math.round((currentSpeed + 0.1f) * 10f) / 10f;
+                if (currentSpeed < 5.0f) {
+                    currentSpeed = Math.min(5.0f, Math.round((currentSpeed + 0.1f) * 10f) / 10f);
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                     if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
                     saveCurrentPosition();
@@ -352,7 +359,7 @@ public class MainActivity extends Activity {
         if (count <= 0) return;
         int current = listView.getSelectedItemPosition();
         if (current < 0) current = 0;
-        listView.setSelection(Math.max(0, Math.min(count - 1, current + delta)));
+        listView.setSelection((current + delta + count) % count);
         listView.requestFocus();
     }
 
@@ -377,7 +384,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         saveCurrentPosition();
-        if (audioPlayer != null) audioPlayer.stop();
+        // Playback is owned by the foreground keep-alive service; do not stop audio when the UI closes.
         super.onDestroy();
     }
 }
