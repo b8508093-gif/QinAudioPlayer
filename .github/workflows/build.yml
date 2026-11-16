@@ -21,8 +21,10 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
 
-    - name: Build APK with Gradle
+    - name: Install Gradle and Build APK
       run: |
+        sudo apt-get update
+        sudo apt-get install -y gradle
         gradle wrapper --gradle-version 7.5
         chmod +x gradlew
         ./gradlew assembleDebug --stacktrace
