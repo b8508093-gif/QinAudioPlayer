@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
+import android.media.MediaPlayer; // Kept for source compatibility; playback uses SonicAudioPlayer.
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private List<File> fileList;
     private List<String> itemNames;
     
-    private MediaPlayer mediaPlayer;
+    private SonicAudioPlayer audioPlayer;
     private File currentAudioFile;
     
     private float currentSpeed = 1.0f;
@@ -142,56 +142,50 @@ public class MainActivity extends Activity {
     private void playAudioFile(File file) {
         currentAudioFile = file;
         txtCurrentFile.setText(file.getName());
-        
         try {
-            if (mediaPlayer != null) {
-                mediaPlayer.release();
-            }
-            mediaPlayer = new MediaPlayer();
-            mediaPlayer.setDataSource(file.getAbsolutePath());
-            mediaPlayer.prepare();
-
-            int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
-            if (savedPos > 3000) {
-                savedPos -= 3000;
-            }
-            if (savedPos < mediaPlayer.getDuration()) {
-                mediaPlayer.seekTo(savedPos);
-            }
-
+            if (audioPlayer != null) audioPlayer.stop();
             currentSpeed = prefs.getFloat(file.getAbsolutePath() + "_speed", 1.0f);
+            currentSpeed = Math.max(0.5f, Math.min(2.5f, currentSpeed));
             txtSpeed.setText("מהירות: " + currentSpeed + "x");
-
-            mediaPlayer.start();
-            isPlaying = true;
-
-            prefs.edit().putString("last_played", file.getAbsolutePath()).apply();
-
-            mediaPlayer.setOnCompletionListener(mp -> {
-                isPlaying = false;
-                playNextInDir();
+            int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
+            audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
+                    new SonicAudioPlayer.Listener() {
+                @Override public void onProgress(int positionMs) {
+                    txtTime.setText(formatTime(positionMs) + " / --:--");
+                }
+                @Override public void onCompleted() {
+                    isPlaying = false;
+                    playNextInDir();
+                }
+                @Override public void onError(Exception error) {
+                    isPlaying = false;
+                    Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                }
             });
-
+            audioPlayer.start(savedPos);
+            isPlaying = true;
+            prefs.edit().putString("last_played", file.getAbsolutePath()).apply();
         } catch (Exception e) {
             Toast.makeText(this, "שגיאה בנגינת קובץ", Toast.LENGTH_SHORT).show();
         }
     }
 
+    private String formatTime(int milliseconds) {
+        int totalSeconds = Math.max(0, milliseconds) / 1000;
+        return String.format(java.util.Locale.US, "%02d:%02d", totalSeconds / 60, totalSeconds % 60);
+    }
+
     private void pauseAudio() {
-        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
+        if (audioPlayer != null && isPlaying) {
+            audioPlayer.pause();
             isPlaying = false;
             saveCurrentPosition();
         }
     }
 
     private void resumeWithSmartJump() {
-        if (mediaPlayer != null && !isPlaying) {
-            int currentPos = mediaPlayer.getCurrentPosition();
-            if (currentPos > 3000) {
-                mediaPlayer.seekTo(currentPos - 3000);
-            }
-            mediaPlayer.start();
+        if (audioPlayer != null && !isPlaying) {
+            audioPlayer.resume();
             isPlaying = true;
         } else if (currentAudioFile != null) {
             playAudioFile(currentAudioFile);
@@ -199,10 +193,9 @@ public class MainActivity extends Activity {
     }
 
     private void saveCurrentPosition() {
-        if (mediaPlayer != null && currentAudioFile != null) {
-            prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", mediaPlayer.getCurrentPosition())
-                        .putFloat(currentAudioFile.getAbsolutePath() + "_speed", currentSpeed)
-                        .apply();
+        if (audioPlayer != null && currentAudioFile != null) {
+            prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", audioPlayer.getPositionMs())
+                    .putFloat(currentAudioFile.getAbsolutePath() + "_speed", currentSpeed).apply();
         }
     }
 
@@ -252,15 +245,15 @@ public class MainActivity extends Activity {
 
             case KeyEvent.KEYCODE_1:
                 if (mediaPlayer != null) {
-                    int pos = mediaPlayer.getCurrentPosition() - 5000;
-                    mediaPlayer.seekTo(Math.max(0, pos));
+                    int pos = audioPlayer.getPositionMs() - 5000;
+                    restartAtPosition(Math.max(0, pos));
                 }
                 return true;
 
             case KeyEvent.KEYCODE_3:
                 if (mediaPlayer != null) {
-                    int pos = mediaPlayer.getCurrentPosition() + 5000;
-                    if (pos < mediaPlayer.getDuration()) mediaPlayer.seekTo(pos);
+                    int pos = audioPlayer.getPositionMs() + 5000;
+                    restartAtPosition(pos);
                 }
                 return true;
 
@@ -278,6 +271,7 @@ public class MainActivity extends Activity {
                 if (currentSpeed > 0.5f) {
                     currentSpeed = Math.round((currentSpeed - 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
+                    if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
                     saveCurrentPosition();
                 }
                 return true;
@@ -293,6 +287,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_0:
                 currentSpeed = 1.0f;
                 txtSpeed.setText("מהירות: 1.0x");
+                if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
                 saveCurrentPosition();
                 return true;
 
@@ -320,12 +315,16 @@ public class MainActivity extends Activity {
         return super.onKeyDown(keyCode, event);
     }
 
+    private void restartAtPosition(int positionMs) {
+        if (currentAudioFile == null) return;
+        prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", positionMs).apply();
+        playAudioFile(currentAudioFile);
+    }
+
     @Override
     protected void onDestroy() {
-        super.onDestroy();
         saveCurrentPosition();
-        if (mediaPlayer != null) {
-            mediaPlayer.release();
-        }
+        if (audioPlayer != null) audioPlayer.stop();
+        super.onDestroy();
     }
 }
