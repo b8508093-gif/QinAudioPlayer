@@ -65,7 +65,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="5:נגן/השהה | 1/3:דלג 5ש | 7/9:מהירות | #:תפריטים"
+        android:text="5:נגן/השהה | */מרכז:בחירה | חצים:ניווט | 1/3:דלג | 7/9:מהירות"
         android:textColor="#777777"
         android:textSize="9sp"
         android:gravity="center"
