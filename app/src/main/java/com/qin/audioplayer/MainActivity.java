@@ -201,6 +201,7 @@ public class MainActivity extends Activity {
         currentDurationMs = 0;
         txtTime.setText("00:00 / --:--");
         txtCurrentFile.setText(file.getName());
+        showPlayerPage();
         try {
             if (audioPlayer != null) audioPlayer.stop();
             currentSpeed = prefs.getFloat("global_speed", currentSpeed);
