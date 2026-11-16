@@ -88,11 +88,13 @@ public class MainActivity extends Activity {
             if (screenPage == 2) {
                 if (position < historyFiles.size()) {
                     File recent = historyFiles.get(position);
-                    if (recent.exists() && recent.isDirectory()) loadDirectory(recent);\n                    else if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);
+                    if (recent.exists() && recent.isDirectory()) loadDirectory(recent);
+                    else if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);
                 }
             } else if (screenPage == 0) {
                 File selected = fileList.get(position);
                 if (selected.isDirectory()) {
+                    rememberInHistory(selected);
                     loadDirectory(selected);
                 } else if (isAudioFile(selected)) {
                     playAudioFile(selected);
