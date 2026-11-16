@@ -244,11 +244,11 @@ public class MainActivity extends Activity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                if (listView.getCount() > 0) listView.setSelection(Math.max(0, listView.getSelectedItemPosition() - 1));
+                moveSelection(-1);
                 return true;
 
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (listView.getCount() > 0) listView.setSelection(Math.min(listView.getCount() - 1, Math.max(0, listView.getSelectedItemPosition()) + 1));
+                moveSelection(1);
                 return true;
 
             case KeyEvent.KEYCODE_STAR:
@@ -281,13 +281,21 @@ public class MainActivity extends Activity {
                 return true;
 
             case KeyEvent.KEYCODE_2:
-                AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI);
+                if (!isPlaying) {
+                    moveSelection(-1);
+                } else {
+                    AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+                    am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI);
+                }
                 return true;
 
             case KeyEvent.KEYCODE_8:
-                AudioManager amDown = (AudioManager) getSystemService(AUDIO_SERVICE);
-                amDown.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
+                if (!isPlaying) {
+                    moveSelection(1);
+                } else {
+                    AudioManager amDown = (AudioManager) getSystemService(AUDIO_SERVICE);
+                    amDown.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
+                }
                 return true;
 
             case KeyEvent.KEYCODE_7:
@@ -337,6 +345,15 @@ public class MainActivity extends Activity {
                 return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    private void moveSelection(int delta) {
+        int count = listView.getCount();
+        if (count <= 0) return;
+        int current = listView.getSelectedItemPosition();
+        if (current < 0) current = 0;
+        listView.setSelection(Math.max(0, Math.min(count - 1, current + delta)));
+        listView.requestFocus();
     }
 
     private void activateSelectedItem() {
