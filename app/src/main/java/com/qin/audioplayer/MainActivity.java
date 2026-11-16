@@ -88,7 +88,7 @@ public class MainActivity extends Activity {
             if (screenPage == 2) {
                 if (position < historyFiles.size()) {
                     File recent = historyFiles.get(position);
-                    if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);
+                    if (recent.exists() && recent.isDirectory()) loadDirectory(recent);\n                    else if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);
                 }
             } else if (screenPage == 0) {
                 File selected = fileList.get(position);
@@ -159,7 +159,7 @@ public class MainActivity extends Activity {
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
 
-        if (dir.getParentFile() != null) {
+        if (dir.getParentFile() != null && !dir.getAbsolutePath().equals(Environment.getExternalStorageDirectory().getAbsolutePath()) && !"/storage".equals(dir.getParent())) {
             fileList.add(dir.getParentFile());
             itemNames.add("📁 .. (תיקיית האם)");
         }
@@ -193,7 +193,7 @@ public class MainActivity extends Activity {
 
     private void playAudioFile(File file) {
         currentAudioFile = file;
-        rememberInHistory(file);
+        rememberInHistory(file.getParentFile() == null ? file : file.getParentFile());
         currentDurationMs = 0;
         txtTime.setText("00:00 / --:--");
         txtCurrentFile.setText(file.getName());
