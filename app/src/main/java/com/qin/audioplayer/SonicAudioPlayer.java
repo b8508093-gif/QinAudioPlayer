@@ -21,6 +21,7 @@ import sonic.Sonic;
 public final class SonicAudioPlayer {
     public interface Listener {
         void onProgress(int positionMs);
+        void onDuration(int durationMs);
         void onCompleted();
         void onError(Exception error);
     }
@@ -106,6 +107,10 @@ public final class SonicAudioPlayer {
                 }
             }
             if (audioTrackIndex < 0) throw new IOException("No audio track");
+            if (inputFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                final int duration = (int)(inputFormat.getLong(MediaFormat.KEY_DURATION) / 1000L);
+                main.post(new Runnable() { @Override public void run() { if (!stopped.get()) listener.onDuration(duration); }});
+            }
             extractor.selectTrack(audioTrackIndex);
             if (startMs > 0) extractor.seekTo(startMs * 1000L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
 
