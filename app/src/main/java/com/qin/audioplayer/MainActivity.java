@@ -158,10 +158,12 @@ public class MainActivity extends Activity {
                 }
                 @Override public void onCompleted() {
                     isPlaying = false;
+                    audioPlayer = null;
                     playNextInDir();
                 }
                 @Override public void onError(Exception error) {
                     isPlaying = false;
+                    audioPlayer = null;
                     Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
