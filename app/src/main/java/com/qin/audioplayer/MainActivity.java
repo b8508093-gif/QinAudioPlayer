@@ -278,6 +278,7 @@ public class MainActivity extends Activity {
                 if (currentSpeed > 0.5f) {
                     currentSpeed = Math.round((currentSpeed - 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
+                    saveCurrentPosition();
                 }
                 return true;
 
@@ -285,17 +286,18 @@ public class MainActivity extends Activity {
                 if (currentSpeed < 2.5f) {
                     currentSpeed = Math.round((currentSpeed + 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
+                    saveCurrentPosition();
                 }
                 return true;
 
             case KeyEvent.KEYCODE_0:
                 currentSpeed = 1.0f;
                 txtSpeed.setText("מהירות: 1.0x");
+                saveCurrentPosition();
                 return true;
 
             case KeyEvent.KEYCODE_4:
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                prevInDir(); // helper or playPrevInDir
                 playPrevInDir();
                 return true;
 
