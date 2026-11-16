@@ -137,10 +137,14 @@ public class MainActivity extends Activity {
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames);
         listView.setAdapter(adapter);
+        if (!itemNames.isEmpty()) listView.setSelection(0);
+        listView.requestFocus();
     }
 
     private void playAudioFile(File file) {
         currentAudioFile = file;
+        currentDurationMs = 0;
+        txtTime.setText("00:00 / --:--");
         txtCurrentFile.setText(file.getName());
         try {
             if (audioPlayer != null) audioPlayer.stop();
@@ -239,9 +243,23 @@ public class MainActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (listView.getCount() > 0) listView.setSelection(Math.max(0, listView.getSelectedItemPosition() - 1));
+                return true;
+
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (listView.getCount() > 0) listView.setSelection(Math.min(listView.getCount() - 1, Math.max(0, listView.getSelectedItemPosition()) + 1));
+                return true;
+
+            case KeyEvent.KEYCODE_STAR:
+                activateSelectedItem();
+                return true;
+
             case KeyEvent.KEYCODE_5:
             case KeyEvent.KEYCODE_DPAD_CENTER:
-                if (isPlaying) {
+                if (audioPlayer == null && currentAudioFile == null) {
+                    activateSelectedItem();
+                } else if (isPlaying) {
                     pauseAudio();
                 } else {
                     resumeWithSmartJump();
@@ -319,6 +337,18 @@ public class MainActivity extends Activity {
                 return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    private void activateSelectedItem() {
+        int position = listView.getSelectedItemPosition();
+        if (position < 0 || fileList == null || position >= fileList.size()) return;
+        File selected = fileList.get(position);
+        if (selected.isDirectory()) {
+            currentDir = selected;
+            loadDirectory(selected);
+        } else if (isAudioFile(selected)) {
+            playAudioFile(selected);
+        }
     }
 
     private void restartAtPosition(int positionMs) {
