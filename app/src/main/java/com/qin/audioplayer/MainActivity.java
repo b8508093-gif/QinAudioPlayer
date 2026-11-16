@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
         progressBar = findViewById(R.id.progressBar);
 
         prefs = getSharedPreferences("QinPlayerPrefs", MODE_PRIVATE);
+        currentSpeed = Math.max(0.5f, Math.min(5.0f, prefs.getFloat("global_speed", 1.0f)));
 
         TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
         telephonyManager.listen(new PhoneStateListener() {
@@ -201,7 +202,7 @@ public class MainActivity extends Activity {
         txtCurrentFile.setText(file.getName());
         try {
             if (audioPlayer != null) audioPlayer.stop();
-            currentSpeed = prefs.getFloat(file.getAbsolutePath() + "_speed", currentSpeed);
+            currentSpeed = prefs.getFloat("global_speed", currentSpeed);
             currentSpeed = Math.max(0.5f, Math.min(5.0f, currentSpeed));
             txtSpeed.setText("מהירות: " + currentSpeed + "x");
             int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
@@ -264,7 +265,8 @@ public class MainActivity extends Activity {
     private void saveCurrentPosition() {
         if (audioPlayer != null && currentAudioFile != null) {
             prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", audioPlayer.getPositionMs())
-                    .putFloat(currentAudioFile.getAbsolutePath() + "_speed", currentSpeed).apply();
+                    .putFloat(currentAudioFile.getAbsolutePath() + "_speed", currentSpeed)
+                    .putFloat("global_speed", currentSpeed).apply();
         }
     }
 
@@ -365,6 +367,7 @@ public class MainActivity extends Activity {
                     currentSpeed = Math.max(0.5f, Math.round((currentSpeed - 0.1f) * 10f) / 10f);
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                     if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
+                    prefs.edit().putFloat("global_speed", currentSpeed).apply();
                     saveCurrentPosition();
                 }
                 return true;
