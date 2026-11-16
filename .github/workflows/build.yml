@@ -21,11 +21,20 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
 
+    - name: Install Android SDK Platforms and Tools
+      run: |
+        yes | sdkmanager --licenses || true
+        sdkmanager "platforms;android-28" "build-tools;28.0.3"
+
     - name: Generate Gradle Wrapper and Build APK
       run: |
         gradle wrapper --gradle-version 7.5
         chmod +x gradlew
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --stacktrace
+
+    - name: Verify APK Exists
+      run: |
+        ls -la app/build/outputs/apk/debug/
 
     - name: Upload APK
       uses: actions/upload-artifact@v3
