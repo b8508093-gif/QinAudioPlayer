@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     private List<String> itemNames;
     
     private SonicAudioPlayer audioPlayer;
+    private int currentDurationMs;
     private File currentAudioFile;
     
     private float currentSpeed = 1.0f;
@@ -150,7 +151,10 @@ public class MainActivity extends Activity {
             audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
                     new SonicAudioPlayer.Listener() {
                 @Override public void onProgress(int positionMs) {
-                    txtTime.setText(formatTime(positionMs) + " / --:--");
+                    txtTime.setText(formatTime(positionMs) + " / " + formatTime(currentDurationMs));
+                }
+                @Override public void onDuration(int durationMs) {
+                    currentDurationMs = durationMs;
                 }
                 @Override public void onCompleted() {
                     isPlaying = false;
