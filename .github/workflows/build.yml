@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v3
 
@@ -17,17 +18,17 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
 
-    - name: Build with Ant/Gradle direct
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+
+    - name: Generate Gradle Wrapper and Build APK
       run: |
-        export ANDROID_HOME=$HOME/android-sdk
-        mkdir -p $ANDROID_HOME
-        cd app
-        javac -version
-        echo "Checking source files..."
-        ls -R src/
-    
-    - name: Simple Build fallback
-      run: |
-        echo "Creating basic build structure"
-        mkdir -p build/outputs/apk/debug/
-        # נבצע יצירת קובץ דמה או נראה היכן הבעיה הספציפית אם תרצה
+        gradle wrapper --gradle-version 7.5
+        chmod +x gradlew
+        ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: QinAudioPlayer-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
