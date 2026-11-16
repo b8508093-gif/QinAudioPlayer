@@ -1,10 +1,7 @@
 package com.qin.audioplayer;
 
 import android.app.Activity;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -14,15 +11,10 @@ import android.os.Handler;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.view.KeyEvent;
-import android.view.View;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import com.sabre.sonic.Sonic;
-import com.sabre.sonic.SonicAudioTrack;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -39,12 +31,11 @@ public class MainActivity extends Activity {
     private List<String> itemNames;
     
     private MediaPlayer mediaPlayer;
-    private SonicAudioTrack sonicAudioTrack;
     private File currentAudioFile;
     
     private float currentSpeed = 1.0f;
     private boolean isPlaying = false;
-    private int currentMode = 0; // 0: סייר תיקיות, 1: היסטוריה
+    private int currentMode = 0;
     
     private SharedPreferences prefs;
     private Handler handler = new Handler();
@@ -63,7 +54,6 @@ public class MainActivity extends Activity {
 
         prefs = getSharedPreferences("QinPlayerPrefs", MODE_PRIVATE);
 
-        // האזנה לשיחות טלפון (עצירה אוטומטית והמשך)
         TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
         telephonyManager.listen(new PhoneStateListener() {
             @Override
@@ -76,7 +66,6 @@ public class MainActivity extends Activity {
                 } else if (state == TelephonyManager.CALL_STATE_IDLE) {
                     if (isPhoneCalling) {
                         isPhoneCalling = false;
-                        // המתנה קצרה והמשך נגינה עם קפיצה חכמה 3 שניות אחורה
                         handler.postDelayed(() -> {
                             if (currentAudioFile != null) {
                                 resumeWithSmartJump();
@@ -88,7 +77,6 @@ public class MainActivity extends Activity {
             }
         }, PhoneStateListener.LISTEN_CALL_STATE);
 
-        // התחלה מתיקיית האחסון החיצוני / שורש
         File root = Environment.getExternalStorageDirectory();
         if (root.exists()) {
             currentDir = root;
@@ -163,28 +151,24 @@ public class MainActivity extends Activity {
             mediaPlayer.setDataSource(file.getAbsolutePath());
             mediaPlayer.prepare();
 
-            // שחזור מיקום שמור אחרון
             int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
             if (savedPos > 3000) {
-                savedPos -= 3000; // קפיצה חכמה 3 שניות אחורה
+                savedPos -= 3000;
             }
             if (savedPos < mediaPlayer.getDuration()) {
                 mediaPlayer.seekTo(savedPos);
             }
 
-            // שחזור מהירות שמורה
             currentSpeed = prefs.getFloat(file.getAbsolutePath() + "_speed", 1.0f);
             txtSpeed.setText("מהירות: " + currentSpeed + "x");
 
             mediaPlayer.start();
             isPlaying = true;
 
-            // שמירת היסטוריה
             prefs.edit().putString("last_played", file.getAbsolutePath()).apply();
 
             mediaPlayer.setOnCompletionListener(mp -> {
                 isPlaying = false;
-                // מעבר אוטומטי לבא בתור בתיקייה אם יש
                 playNextInDir();
             });
 
@@ -205,7 +189,7 @@ public class MainActivity extends Activity {
         if (mediaPlayer != null && !isPlaying) {
             int currentPos = mediaPlayer.getCurrentPosition();
             if (currentPos > 3000) {
-                mediaPlayer.seekTo(currentPos - 3000); // 3 שניות אחורה
+                mediaPlayer.seekTo(currentPos - 3000);
             }
             mediaPlayer.start();
             isPlaying = true;
@@ -224,10 +208,8 @@ public class MainActivity extends Activity {
 
     private void playNextInDir() {
         if (fileList == null || currentAudioFile == null) return;
-        boolean found = false;
         for (int i = 0; i < fileList.size(); i++) {
             if (fileList.get(i).equals(currentAudioFile)) {
-                // חפש את קובץ האודיו הבא ברשימה
                 for (int j = i + 1; j < fileList.size(); j++) {
                     if (isAudioFile(fileList.get(j))) {
                         playAudioFile(fileList.get(j));
@@ -258,9 +240,8 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // מיפוי מקשים פיזיים מלא ל-Qin 1s+
         switch (keyCode) {
-            case KeyEvent.KEYCODE_5: // OK / Play / Pause
+            case KeyEvent.KEYCODE_5:
             case KeyEvent.KEYCODE_DPAD_CENTER:
                 if (isPlaying) {
                     pauseAudio();
@@ -269,60 +250,61 @@ public class MainActivity extends Activity {
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_1: // קפיצה 5 שניות אחורה
+            case KeyEvent.KEYCODE_1:
                 if (mediaPlayer != null) {
                     int pos = mediaPlayer.getCurrentPosition() - 5000;
                     mediaPlayer.seekTo(Math.max(0, pos));
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_3: // קפיצה 5 שניות קדימה
+            case KeyEvent.KEYCODE_3:
                 if (mediaPlayer != null) {
                     int pos = mediaPlayer.getCurrentPosition() + 5000;
                     if (pos < mediaPlayer.getDuration()) mediaPlayer.seekTo(pos);
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_2: // הגברת עוצמת קול
+            case KeyEvent.KEYCODE_2:
                 AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
                 am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI);
                 return true;
 
-            case KeyEvent.KEYCODE_8: // הנמכת עוצמת קול
+            case KeyEvent.KEYCODE_8:
                 AudioManager amDown = (AudioManager) getSystemService(AUDIO_SERVICE);
                 amDown.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
                 return true;
 
-            case KeyEvent.KEYCODE_7: // הפחתת מהירות ב-0.1x
+            case KeyEvent.KEYCODE_7:
                 if (currentSpeed > 0.5f) {
                     currentSpeed = Math.round((currentSpeed - 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_9: // הגברת מהירות ב-0.1x
+            case KeyEvent.KEYCODE_9:
                 if (currentSpeed < 2.5f) {
                     currentSpeed = Math.round((currentSpeed + 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_0: // איפוס מהירות ל-1.0x
+            case KeyEvent.KEYCODE_0:
                 currentSpeed = 1.0f;
                 txtSpeed.setText("מהירות: 1.0x");
                 return true;
 
             case KeyEvent.KEYCODE_4:
-            case KeyEvent.KEYCODE_DPAD_LEFT: // רצועה קודמת
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                prevInDir(); // helper or playPrevInDir
                 playPrevInDir();
                 return true;
 
             case KeyEvent.KEYCODE_6:
-            case KeyEvent.KEYCODE_DPAD_RIGHT: // רצועה הבאה
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
                 playNextInDir();
                 return true;
 
-            case KeyEvent.KEYCODE_POUND: // מקש סולמית - הצגת ההיסטוריה האחרונה
+            case KeyEvent.KEYCODE_POUND:
                 String lastPlayedPath = prefs.getString("last_played", null);
                 if (lastPlayedPath != null) {
                     File lastFile = new File(lastPlayedPath);
