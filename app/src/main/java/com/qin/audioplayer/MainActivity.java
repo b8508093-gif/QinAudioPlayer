@@ -267,14 +267,14 @@ public class MainActivity extends Activity {
                 return true;
 
             case KeyEvent.KEYCODE_1:
-                if (mediaPlayer != null) {
+                if (audioPlayer != null) {
                     int pos = audioPlayer.getPositionMs() - 5000;
                     restartAtPosition(Math.max(0, pos));
                 }
                 return true;
 
             case KeyEvent.KEYCODE_3:
-                if (mediaPlayer != null) {
+                if (audioPlayer != null) {
                     int pos = audioPlayer.getPositionMs() + 5000;
                     restartAtPosition(pos);
                 }
