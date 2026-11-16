@@ -50,7 +50,7 @@ public final class SonicAudioPlayer {
         worker.start();
     }
 
-    public void setSpeed(float value) { speed = Math.max(0.5f, Math.min(2.5f, value)); }
+    public void setSpeed(float value) { speed = Math.max(0.5f, Math.min(5.0f, value)); }
     public int getPositionMs() { return positionMs; }
 
     public void pause() {
