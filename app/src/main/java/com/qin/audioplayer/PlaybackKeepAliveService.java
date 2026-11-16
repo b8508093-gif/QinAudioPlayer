@@ -8,12 +8,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 /** Keeps the playback process in the foreground while audio is playing (Android 4.4+). */
 public class PlaybackKeepAliveService extends Service {
     public static final String ACTION_START = "com.qin.audioplayer.START_PLAYBACK";
     public static final String ACTION_STOP = "com.qin.audioplayer.STOP_PLAYBACK";
     private static final int NOTIFICATION_ID = 41;
+    private PowerManager.WakeLock wakeLock;
 
     public static void start(Context context, String title) {
         Intent i = new Intent(context, PlaybackKeepAliveService.class);
@@ -32,6 +34,7 @@ public class PlaybackKeepAliveService extends Service {
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            releaseWakeLock();
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
@@ -49,8 +52,25 @@ public class PlaybackKeepAliveService extends Service {
                 .setOngoing(true)
                 .build();
         startForeground(NOTIFICATION_ID, notification);
+        acquireWakeLock();
         return START_STICKY;
     }
 
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QinAudioPlayer:Playback");
+                wakeLock.setReferenceCounted(false);
+            }
+            if (!wakeLock.isHeld()) wakeLock.acquire();
+        } catch (Exception ignored) {}
+    }
+
+    private void releaseWakeLock() {
+        try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
+    }
+
+    @Override public void onDestroy() { releaseWakeLock(); super.onDestroy(); }
     @Override public IBinder onBind(Intent intent) { return null; }
 }
