@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:orientation="vertical"
+    android:padding="6dp"
+    android:layoutDirection="rtl"
+    android:textDirection="rtl">
+
+    <!-- כותרת מצב / מסך נוכחי -->
+    <TextView
+        android:id="@+id/txtHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="נגן שמע - סייר תיקיות"
+        android:textColor="#00FFCC"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:paddingBottom="4dp" />
+
+    <!-- שם הקובץ המתנגן כעת -->
+    <TextView
+        android:id="@+id/txtCurrentFile"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="לא נבחר קובץ"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:paddingBottom="4dp" />
+
+    <!-- סטטוס (מהירות, זמן, מצב) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_between">
+
+        <TextView
+            android:id="@+id/txtTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00 / 00:00"
+            android:textColor="#AAAAAA"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/txtSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="מהירות: 1.0x"
+            android:textColor="#FFFF00"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- רשימת קבצים / תיקיות / היסטוריה -->
+    <ListView
+        android:id="@+id/listView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="#222222"
+        android:dividerHeight="1dp"
+        android:layout_marginTop="4dp" />
+
+    <!-- מדריך מקשים מהיר בתחתית -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="5:נגן/השהה | 1/3:דלג 5ש | 7/9:מהירות | #:תפריטים"
+        android:textColor="#777777"
+        android:textSize="9sp"
+        android:gravity="center"
+        android:paddingTop="2dp" />
+
+</LinearLayout>
