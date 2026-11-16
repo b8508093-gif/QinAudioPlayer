@@ -12,6 +12,7 @@ import android.telephony.TelephonyManager;
 import android.view.KeyEvent;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,6 +25,9 @@ public class MainActivity extends Activity {
 
     private TextView txtHeader, txtCurrentFile, txtTime, txtSpeed;
     private ListView listView;
+    private ProgressBar progressBar;
+    private int screenPage = 0;
+    private List<File> historyFiles = new ArrayList<>();
     
     private File currentDir;
     private List<File> fileList;
@@ -51,6 +55,7 @@ public class MainActivity extends Activity {
         txtTime = findViewById(R.id.txtTime);
         txtSpeed = findViewById(R.id.txtSpeed);
         listView = findViewById(R.id.listView);
+        progressBar = findViewById(R.id.progressBar);
 
         prefs = getSharedPreferences("QinPlayerPrefs", MODE_PRIVATE);
 
@@ -77,17 +82,10 @@ public class MainActivity extends Activity {
             }
         }, PhoneStateListener.LISTEN_CALL_STATE);
 
-        File root = Environment.getExternalStorageDirectory();
-        if (root.exists()) {
-            currentDir = root;
-        } else {
-            currentDir = new File("/");
-        }
-
-        loadDirectory(currentDir);
+        loadStorageRoots();
 
         listView.setOnItemClickListener((parent, view, position, id) -> {
-            if (currentMode == 0) {
+            if (screenPage == 2) {\n                if (position < historyFiles.size()) {\n                    File recent = historyFiles.get(position);\n                    if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);\n                }\n            } else if (screenPage == 0) {
                 File selected = fileList.get(position);
                 if (selected.isDirectory()) {
                     loadDirectory(selected);
@@ -98,7 +96,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private boolean isAudioFile(File file) {
+    private boolean isSystemFolder(File f) {\n        String n = f.getName();\n        return n.equalsIgnoreCase("Android") || n.equalsIgnoreCase("LOST.DIR") || n.equalsIgnoreCase("System Volume Information") || n.equalsIgnoreCase("$RECYCLE.BIN");\n    }\n\n    private void loadStorageRoots() {\n        screenPage = 0; currentMode = 0; currentDir = null;\n        fileList = new ArrayList<>(); itemNames = new ArrayList<>();\n        File primary = Environment.getExternalStorageDirectory();\n        if (primary != null && primary.exists()) { fileList.add(primary); itemNames.add("מכשיר – " + primary.getName()); }\n        File storage = new File("/storage"); File[] roots = storage.listFiles();\n        if (roots != null) for (File r : roots) {\n            if (!r.isDirectory() || !r.canRead() || r.getName().equals("emulated") || r.getName().equals("self") || r.getName().startsWith(".")) continue;\n            if (primary != null && r.getAbsolutePath().equals(primary.getAbsolutePath())) continue;\n            fileList.add(r); itemNames.add("כרטיס זיכרון – " + r.getName());\n        }\n        txtHeader.setText("בחר אחסון"); listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);\n        listView.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames));\n        if (!itemNames.isEmpty()) listView.setSelection(0); listView.requestFocus();\n    }\n\n    private void showPlayerPage() {\n        screenPage = 1; listView.setVisibility(android.view.View.GONE); progressBar.setVisibility(android.view.View.VISIBLE);\n        txtHeader.setText("נגן");\n        txtCurrentFile.setText(currentAudioFile == null ? "לא נבחר שיר" : currentAudioFile.getName());\n        txtSpeed.setText("מהירות: " + currentSpeed + "x");\n    }\n\n    private void showHistoryPage() {\n        screenPage = 2; listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);\n        historyFiles.clear(); itemNames = new ArrayList<>();\n        String raw = prefs.getString("history_paths", "");\n        for (String path : raw.split("\\n")) { if (path.length() > 0) { File f = new File(path); if (f.exists()) { historyFiles.add(f); itemNames.add(f.getName() + " – " + f.getParent()); } } }\n        fileList = new ArrayList<>(historyFiles); txtHeader.setText("היסטוריה – מיקומים אחרונים");\n        listView.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames));\n        if (!itemNames.isEmpty()) listView.setSelection(0); listView.requestFocus();\n    }\n\n    private void rememberInHistory(File f) {\n        String old = prefs.getString("history_paths", ""); String path = f.getAbsolutePath();\n        ArrayList<String> paths = new ArrayList<>(); paths.add(path);\n        for (String p : old.split("\\n")) if (p.length() > 0 && !p.equals(path) && paths.size() < 30) paths.add(p);\n        StringBuilder b = new StringBuilder(); for (String p : paths) { if (b.length() > 0) b.append("\\n"); b.append(p); }\n        prefs.edit().putString("history_paths", b.toString()).apply();\n    }\n\n    private boolean isAudioFile(File file) {
         String name = file.getName().toLowerCase();
         return name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a") || name.endsWith(".ogg") || name.endsWith(".aac");
     }
@@ -119,7 +117,7 @@ public class MainActivity extends Activity {
             List<File> folders = new ArrayList<>();
             List<File> audios = new ArrayList<>();
             for (File f : files) {
-                if (f.isDirectory()) folders.add(f);
+                if (f.isDirectory() && !f.getName().startsWith(".") && !isSystemFolder(f)) folders.add(f);
                 else if (isAudioFile(f)) audios.add(f);
             }
             Collections.sort(folders);
