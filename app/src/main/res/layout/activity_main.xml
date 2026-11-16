@@ -53,6 +53,15 @@
             android:textSize="11sp" />
     </LinearLayout>
 
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="1000"
+        android:progress="0"
+        android:visibility="gone" />
+
     <ListView
         android:id="@+id/listView"
         android:layout_width="match_parent"
@@ -65,7 +74,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="5:נגן/השהה | */בחירה | 2/8:ניווט/עוצמה | 4/6:קודם/הבא | 7/9:מהירות"
+        android:text="5:נגן/השהה | *:בחירה | #:מסכים | 2/8:ניווט/עוצמה | 4/6:קודם/הבא | 7/9:מהירות עד ×5"
         android:textColor="#777777"
         android:textSize="9sp"
         android:gravity="center"
