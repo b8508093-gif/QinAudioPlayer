@@ -378,6 +378,7 @@ public class MainActivity extends Activity {
                     currentSpeed = Math.min(5.0f, Math.round((currentSpeed + 0.1f) * 10f) / 10f);
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
                     if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
+                    prefs.edit().putFloat("global_speed", currentSpeed).apply();
                     saveCurrentPosition();
                 }
                 return true;
@@ -386,6 +387,7 @@ public class MainActivity extends Activity {
                 currentSpeed = 1.0f;
                 txtSpeed.setText("מהירות: 1.0x");
                 if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
+                prefs.edit().putFloat("global_speed", currentSpeed).apply();
                 saveCurrentPosition();
                 return true;
 
