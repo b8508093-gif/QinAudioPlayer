@@ -162,7 +162,8 @@ public class MainActivity extends Activity {
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
 
-        if (dir.getParentFile() != null && !dir.getAbsolutePath().equals(Environment.getExternalStorageDirectory().getAbsolutePath()) && !"/storage".equals(dir.getParent())) {
+        boolean storageRoot = dir.getParent() != null && (dir.getParent().equals("/storage") || dir.getParent().equals("/storage/emulated"));
+        if (dir.getParentFile() != null && !storageRoot && !dir.getAbsolutePath().equals(Environment.getExternalStorageDirectory().getAbsolutePath())) {
             fileList.add(dir.getParentFile());
             itemNames.add("📁 .. (תיקיית האם)");
         }
