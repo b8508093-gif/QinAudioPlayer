@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
-import android.media.MediaPlayer; // Kept for source compatibility; playback uses SonicAudioPlayer.
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -280,6 +279,7 @@ public class MainActivity extends Activity {
                 if (currentSpeed < 2.5f) {
                     currentSpeed = Math.round((currentSpeed + 0.1f) * 10f) / 10f;
                     txtSpeed.setText("מהירות: " + currentSpeed + "x");
+                    if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
                     saveCurrentPosition();
                 }
                 return true;
