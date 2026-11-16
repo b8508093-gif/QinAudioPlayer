@@ -143,7 +143,7 @@ public class MainActivity extends Activity {
         String old = prefs.getString("history_paths", ""); String path = f.getAbsolutePath();
         ArrayList<String> paths = new ArrayList<>(); paths.add(path);
         for (String p : old.split("\\n")) if (p.length() > 0 && !p.equals(path) && paths.size() < 30) paths.add(p);
-        StringBuilder b = new StringBuilder(); for (String p : paths) { if (b.length() > 0) b.append("\\n"); b.append(p); }
+        StringBuilder b = new StringBuilder(); for (String p : paths) { if (b.length() > 0) b.append("\n"); b.append(p); }
         prefs.edit().putString("history_paths", b.toString()).apply();
     }
 
@@ -153,7 +153,8 @@ public class MainActivity extends Activity {
     }
 
     private void loadDirectory(File dir) {
-        currentMode = 0;
+        screenPage = 0; currentMode = 0;
+        listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);
         txtHeader.setText("תיקייה: " + dir.getName());
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
@@ -192,6 +193,7 @@ public class MainActivity extends Activity {
 
     private void playAudioFile(File file) {
         currentAudioFile = file;
+        rememberInHistory(file);
         currentDurationMs = 0;
         txtTime.setText("00:00 / --:--");
         txtCurrentFile.setText(file.getName());
@@ -390,6 +392,12 @@ public class MainActivity extends Activity {
                 return true;
 
             case KeyEvent.KEYCODE_POUND:
+                if (screenPage == 0) showPlayerPage();
+                else if (screenPage == 1) showHistoryPage();
+                else loadStorageRoots();
+                return true;
+
+            case KeyEvent.KEYCODE_POUND + 1000:
                 String lastPlayedPath = prefs.getString("last_played", null);
                 if (lastPlayedPath != null) {
                     File lastFile = new File(lastPlayedPath);
