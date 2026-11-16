@@ -405,16 +405,6 @@ public class MainActivity extends Activity {
                 else loadStorageRoots();
                 return true;
 
-            case KeyEvent.KEYCODE_POUND + 1000:
-                String lastPlayedPath = prefs.getString("last_played", null);
-                if (lastPlayedPath != null) {
-                    File lastFile = new File(lastPlayedPath);
-                    if (lastFile.exists()) {
-                        playAudioFile(lastFile);
-                        Toast.makeText(this, "חזרה לקובץ האחרון", Toast.LENGTH_SHORT).show();
-                    }
-                }
-                return true;
         }
         return super.onKeyDown(keyCode, event);
     }
