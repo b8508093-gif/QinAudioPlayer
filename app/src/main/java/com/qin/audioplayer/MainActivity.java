@@ -206,10 +206,12 @@ public class MainActivity extends Activity {
             audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
                     new SonicAudioPlayer.Listener() {
                 @Override public void onProgress(int positionMs) {
-                    txtTime.setText(formatTime(positionMs) + " / " + formatTime(currentDurationMs));\n                    if (progressBar != null && currentDurationMs > 0) progressBar.setProgress((int)(1000L * positionMs / currentDurationMs));
+                    txtTime.setText(formatTime(positionMs) + " / " + formatTime(currentDurationMs));
+                    if (progressBar != null && currentDurationMs > 0) progressBar.setProgress((int)(1000L * positionMs / currentDurationMs));
                 }
                 @Override public void onDuration(int durationMs) {
-                    currentDurationMs = durationMs;\n                    if (progressBar != null) progressBar.setProgress(0);
+                    currentDurationMs = durationMs;
+                    if (progressBar != null) progressBar.setProgress(0);
                 }
                 @Override public void onCompleted() {
                     isPlaying = false;
