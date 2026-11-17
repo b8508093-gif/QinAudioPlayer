@@ -239,7 +239,7 @@ public class MainActivity extends Activity {
         screenPage = 1;
         listView.setVisibility(android.view.View.GONE);
         progressBar.setVisibility(android.view.View.VISIBLE);
-        txtHeader.setText("נגן");
+        txtHeader.setText(recursiveQueue != null ? "נגן – ניגון תיקייה ותתי־תיקיות" : "נגן");
         txtCurrentFile.setText(currentAudioFile == null ? "לא נבחר שיר" : currentAudioFile.getName());
         txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
     }
@@ -366,6 +366,7 @@ public class MainActivity extends Activity {
                     MainActivity ui = activeInstance == null ? MainActivity.this : activeInstance;
                     ui.isPlaying = false;
                     ui.audioPlayer = null;
+                    if (ui.currentAudioFile != null) ui.persistFolderPosition(0);
                     if (!ui.playNextInDir()) {
                         PlaybackKeepAliveService.stop(ui);
                         ui.audioManager.abandonAudioFocus(ui.audioFocusListener);
