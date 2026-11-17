@@ -78,7 +78,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="5:נגן/השהה | *:בחירה | #:מסכים | 2/8:ניווט/עוצמה | 4/6:קודם/הבא | 7/9:מהירות עד ×5"
+        android:text="5:נגן/השהה | *:בחירה / A-B | לחיצה ארוכה *:כל תתי־התיקיות | #:מסכים | 1/3:דילוג | 4/6:קודם/הבא | 7/9:מהירות"
         android:textColor="#777777"
         android:textSize="11sp"
         android:gravity="center"
