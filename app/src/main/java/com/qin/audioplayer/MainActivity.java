@@ -9,6 +9,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
+import android.util.Base64;
 import android.view.KeyEvent;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -22,32 +23,69 @@ import java.util.Collections;
 import java.util.List;
 
 public class MainActivity extends Activity {
+    private static volatile MainActivity activeInstance;
 
     private TextView txtHeader, txtCurrentFile, txtTime, txtSpeed;
     private ListView listView;
     private ProgressBar progressBar;
-    private int screenPage = 0;
-    private List<File> historyFiles = new ArrayList<>();
-    
+    private int screenPage = 0; // 0 folders, 1 player, 2 history
+
     private File currentDir;
-    private List<File> fileList;
-    private List<String> itemNames;
-    
+    private List<File> fileList = new ArrayList<>();
+    private List<String> itemNames = new ArrayList<>();
+    private List<File> historyFolders = new ArrayList<>();
+    private List<File> recursiveQueue;
+    private int recursiveIndex = -1;
+
     private SonicAudioPlayer audioPlayer;
     private int currentDurationMs;
     private File currentAudioFile;
-    
     private float currentSpeed = 1.0f;
-    private boolean isPlaying = false;
-    private int currentMode = 0;
-    
-    private SharedPreferences prefs;
-    private Handler handler = new Handler();
-    private boolean isPhoneCalling = false;
+    private boolean isPlaying;
+    private boolean isPhoneCalling;
+    private boolean wasPlayingBeforeCall;
+    private boolean resumeAfterAudioFocus;
+    private boolean abLoopRestarting;
+    private int abStartMs = -1, abEndMs = -1;
+    private int forcedStartPosition = -1;
+    private int lastPersistedPosition;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    private SharedPreferences prefs;
+    private final Handler handler = new Handler();
+    private AudioManager audioManager;
+    private final AudioManager.OnAudioFocusChangeListener audioFocusListener =
+            new AudioManager.OnAudioFocusChangeListener() {
+        @Override public void onAudioFocusChange(int change) {
+            if (change == AudioManager.AUDIOFOCUS_LOSS ||
+                    change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                resumeAfterAudioFocus = change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT && isPlaying;
+                if (isPlaying) pauseAudio();
+            } else if (change == AudioManager.AUDIOFOCUS_GAIN && resumeAfterAudioFocus) {
+                resumeAfterAudioFocus = false;
+                resumeWithSmartJump();
+            }
+        }
+    };
+
+    public static void handleExternalCommand(Context context, String command) {
+        MainActivity a = activeInstance;
+        if (a == null || command == null) return;
+        if (MediaButtonReceiver.ACTION_PLAY_PAUSE.equals(command)) {
+            if (a.isPlaying) a.pauseAudio(); else a.resumeWithSmartJump();
+        } else if (MediaButtonReceiver.ACTION_PAUSE.equals(command)) {
+            if (a.isPlaying) a.pauseAudio();
+        } else if (MediaButtonReceiver.ACTION_NEXT.equals(command)) {
+            a.playNextInDir();
+        } else if (MediaButtonReceiver.ACTION_PREVIOUS.equals(command)) {
+            a.playPrevInDir();
+        } else if (MediaButtonReceiver.ACTION_STOP.equals(command)) {
+            a.pauseAudio();
+        }
+    }
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        activeInstance = this;
         setContentView(R.layout.activity_main);
 
         txtHeader = findViewById(R.id.txtHeader);
@@ -56,363 +94,460 @@ public class MainActivity extends Activity {
         txtSpeed = findViewById(R.id.txtSpeed);
         listView = findViewById(R.id.listView);
         progressBar = findViewById(R.id.progressBar);
-
         prefs = getSharedPreferences("QinPlayerPrefs", MODE_PRIVATE);
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
         currentSpeed = Math.max(0.5f, Math.min(5.0f, prefs.getFloat("global_speed", 1.0f)));
 
-        TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-        telephonyManager.listen(new PhoneStateListener() {
-            @Override
-            public void onCallStateChanged(int state, String incomingNumber) {
-                if (state == TelephonyManager.CALL_STATE_RINGING || state == TelephonyManager.CALL_STATE_OFFHOOK) {
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        tm.listen(new PhoneStateListener() {
+            @Override public void onCallStateChanged(int state, String number) {
+                if (state == TelephonyManager.CALL_STATE_RINGING ||
+                        state == TelephonyManager.CALL_STATE_OFFHOOK) {
+                    wasPlayingBeforeCall = isPlaying;
                     isPhoneCalling = true;
-                    if (isPlaying) {
-                        pauseAudio();
-                    }
-                } else if (state == TelephonyManager.CALL_STATE_IDLE) {
-                    if (isPhoneCalling) {
-                        isPhoneCalling = false;
-                        handler.postDelayed(() -> {
-                            if (currentAudioFile != null) {
-                                resumeWithSmartJump();
-                            }
-                        }, 1500);
-                    }
+                    if (isPlaying) pauseAudio();
+                } else if (state == TelephonyManager.CALL_STATE_IDLE && isPhoneCalling) {
+                    isPhoneCalling = false;
+                    if (wasPlayingBeforeCall) handler.postDelayed(new Runnable() {
+                        @Override public void run() { resumeWithSmartJump(); }
+                    }, 1200);
+                    wasPlayingBeforeCall = false;
                 }
-                super.onCallStateChanged(state, incomingNumber);
             }
         }, PhoneStateListener.LISTEN_CALL_STATE);
 
         loadStorageRoots();
+        listView.setOnItemClickListener((parent, view, position, id) -> activatePosition(position));
+    }
 
-        listView.setOnItemClickListener((parent, view, position, id) -> {
-            if (screenPage == 2) {
-                if (position < historyFiles.size()) {
-                    File recent = historyFiles.get(position);
-                    if (recent.exists() && recent.isDirectory()) loadDirectory(recent);
-                    else if (recent.exists() && isAudioFile(recent)) playAudioFile(recent);
-                }
-            } else if (screenPage == 0) {
-                File selected = fileList.get(position);
-                if (selected.isDirectory()) {
-                    rememberInHistory(selected);
-                    loadDirectory(selected);
-                } else if (isAudioFile(selected)) {
-                    playAudioFile(selected);
-                }
-            }
-        });
+    private String folderKey(File folder) {
+        return "folder_" + Base64.encodeToString(folder.getAbsolutePath().getBytes(), Base64.NO_WRAP);
+    }
+
+    private boolean isAudioFile(File f) {
+        String n = f.getName().toLowerCase(java.util.Locale.US);
+        return n.endsWith(".mp3") || n.endsWith(".wav") || n.endsWith(".m4a") ||
+                n.endsWith(".ogg") || n.endsWith(".aac") || n.endsWith(".flac");
     }
 
     private boolean isSystemFolder(File f) {
         String n = f.getName();
-        return n.equalsIgnoreCase("Android") || n.equalsIgnoreCase("LOST.DIR") || n.equalsIgnoreCase("System Volume Information") || n.equalsIgnoreCase("$RECYCLE.BIN");
+        return n.equalsIgnoreCase("Android") || n.equalsIgnoreCase("LOST.DIR") ||
+                n.equalsIgnoreCase("System Volume Information") || n.equalsIgnoreCase("$RECYCLE.BIN");
     }
 
     private void loadStorageRoots() {
-        screenPage = 0; currentMode = 0; currentDir = null;
-        fileList = new ArrayList<>(); itemNames = new ArrayList<>();
+        screenPage = 0;
+        currentDir = null;
+        fileList = new ArrayList<>();
+        itemNames = new ArrayList<>();
         File primary = Environment.getExternalStorageDirectory();
-        if (primary != null && primary.exists()) { fileList.add(primary); itemNames.add("מכשיר – " + primary.getName()); }
-        File storage = new File("/storage"); File[] roots = storage.listFiles();
-        if (roots != null) for (File r : roots) {
-            if (!r.isDirectory() || !r.canRead() || r.getName().equals("emulated") || r.getName().equals("self") || r.getName().startsWith(".")) continue;
-            if (primary != null && r.getAbsolutePath().equals(primary.getAbsolutePath())) continue;
-            fileList.add(r); itemNames.add("כרטיס זיכרון – " + r.getName());
+        if (primary != null && primary.exists() && primary.canRead()) {
+            fileList.add(primary);
+            itemNames.add("מכשיר – " + primary.getName());
         }
-        txtHeader.setText("בחר אחסון"); listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);
-        listView.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames));
-        if (!itemNames.isEmpty()) listView.setSelection(0); listView.requestFocus();
-    }
-
-    private void showPlayerPage() {
-        screenPage = 1; listView.setVisibility(android.view.View.GONE); progressBar.setVisibility(android.view.View.VISIBLE);
-        txtHeader.setText("נגן");
-        txtCurrentFile.setText(currentAudioFile == null ? "לא נבחר שיר" : currentAudioFile.getName());
-        txtSpeed.setText("מהירות: " + currentSpeed + "x");
-    }
-
-    private void showHistoryPage() {
-        screenPage = 2; listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);
-        historyFiles.clear(); itemNames = new ArrayList<>();
-        String raw = prefs.getString("history_paths", "");
-        for (String path : raw.split("\\n")) { if (path.length() > 0) { File f = new File(path); if (f.exists()) { historyFiles.add(f); itemNames.add(f.getName() + " – " + f.getParent()); } } }
-        fileList = new ArrayList<>(historyFiles); txtHeader.setText("היסטוריה – מיקומים אחרונים");
-        listView.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames));
-        if (!itemNames.isEmpty()) listView.setSelection(0); listView.requestFocus();
-    }
-
-    private void rememberInHistory(File f) {
-        String old = prefs.getString("history_paths", ""); String path = f.getAbsolutePath();
-        ArrayList<String> paths = new ArrayList<>(); paths.add(path);
-        for (String p : old.split("\\n")) if (p.length() > 0 && !p.equals(path) && paths.size() < 30) paths.add(p);
-        StringBuilder b = new StringBuilder(); for (String p : paths) { if (b.length() > 0) b.append("\n"); b.append(p); }
-        prefs.edit().putString("history_paths", b.toString()).apply();
-    }
-
-    private boolean isAudioFile(File file) {
-        String name = file.getName().toLowerCase();
-        return name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a") || name.endsWith(".ogg") || name.endsWith(".aac");
+        File[] roots = new File("/storage").listFiles();
+        if (roots != null) for (File r : roots) {
+            if (!r.isDirectory() || !r.canRead() || r.getName().startsWith(".") ||
+                    "emulated".equals(r.getName()) || "self".equals(r.getName())) continue;
+            if (primary != null && r.getAbsolutePath().equals(primary.getAbsolutePath())) continue;
+            fileList.add(r);
+            itemNames.add("כרטיס זיכרון – " + r.getName());
+        }
+        txtHeader.setText("בחר אחסון");
+        listView.setVisibility(android.view.View.VISIBLE);
+        progressBar.setVisibility(android.view.View.GONE);
+        setListAdapter();
     }
 
     private void loadDirectory(File dir) {
-        screenPage = 0; currentMode = 0;
-        listView.setVisibility(android.view.View.VISIBLE); progressBar.setVisibility(android.view.View.GONE);
-        txtHeader.setText("תיקייה: " + dir.getName());
+        if (dir == null || !dir.isDirectory() || !dir.canRead()) return;
+        currentDir = dir;
+        screenPage = 0;
+        recursiveQueue = null;
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
-
-        boolean storageRoot = dir.getParent() != null && (dir.getParent().equals("/storage") || dir.getParent().equals("/storage/emulated"));
-        if (dir.getParentFile() != null && !storageRoot && !dir.getAbsolutePath().equals(Environment.getExternalStorageDirectory().getAbsolutePath())) {
+        boolean storageRoot = dir.getParent() != null &&
+                (dir.getParent().equals("/storage") || dir.getParent().equals("/storage/emulated"));
+        if (dir.getParentFile() != null && !storageRoot &&
+                !dir.getAbsolutePath().equals(Environment.getExternalStorageDirectory().getAbsolutePath())) {
             fileList.add(dir.getParentFile());
             itemNames.add("📁 .. (תיקיית האם)");
         }
-
         File[] files = dir.listFiles();
-        if (files != null) {
-            List<File> folders = new ArrayList<>();
-            List<File> audios = new ArrayList<>();
-            for (File f : files) {
-                if (f.isDirectory() && !f.getName().startsWith(".") && !isSystemFolder(f)) folders.add(f);
-                else if (isAudioFile(f)) audios.add(f);
-            }
-            Collections.sort(folders);
-            Collections.sort(audios);
-
-            for (File f : folders) {
-                fileList.add(f);
-                itemNames.add("📁 " + f.getName());
-            }
-            for (File f : audios) {
-                fileList.add(f);
-                itemNames.add("🎵 " + f.getName());
-            }
+        List<File> folders = new ArrayList<>(), audios = new ArrayList<>();
+        if (files != null) for (File f : files) {
+            if (f.isDirectory() && !f.getName().startsWith(".") && !isSystemFolder(f) && f.canRead())
+                folders.add(f);
+            else if (f.isFile() && isAudioFile(f)) audios.add(f);
         }
+        Collections.sort(folders);
+        Collections.sort(audios);
+        for (File f : folders) { fileList.add(f); itemNames.add("📁 " + f.getName()); }
+        for (File f : audios) { fileList.add(f); itemNames.add("♫ " + f.getName()); }
+        txtHeader.setText("תיקייה: " + dir.getName());
+        listView.setVisibility(android.view.View.VISIBLE);
+        progressBar.setVisibility(android.view.View.GONE);
+        setListAdapter();
+    }
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames);
-        listView.setAdapter(adapter);
+    private void setListAdapter() {
+        listView.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, itemNames));
         if (!itemNames.isEmpty()) listView.setSelection(0);
         listView.requestFocus();
     }
 
-    private void playAudioFile(File file) {
+    private void showPlayerPage() {
+        screenPage = 1;
+        listView.setVisibility(android.view.View.GONE);
+        progressBar.setVisibility(android.view.View.VISIBLE);
+        txtHeader.setText("נגן");
+        txtCurrentFile.setText(currentAudioFile == null ? "לא נבחר שיר" : currentAudioFile.getName());
+        txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
+    }
+
+    private void showHistoryPage() {
+        screenPage = 2;
+        historyFolders = new ArrayList<>();
+        itemNames = new ArrayList<>();
+        String raw = prefs.getString("folder_history_v2", "");
+        for (String path : raw.split("\\n")) {
+            if (path.length() == 0) continue;
+            File folder = new File(path);
+            if (!folder.isDirectory() || !folder.exists()) continue;
+            String key = folderKey(folder);
+            String trackPath = prefs.getString(key + "_track", "");
+            File track = new File(trackPath);
+            int pos = trackPath.length() == 0 ? 0 : prefs.getInt(trackPath + "_pos", 0);
+            float speed = prefs.getFloat(key + "_speed", 1.0f);
+            historyFolders.add(folder);
+            itemNames.add(folder.getName() + "  |  " +
+                    (trackPath.length() == 0 ? "ללא רצועה אחרונה" : track.getName()) +
+                    "  |  " + formatTime(pos) + "  |  ×" +
+                    String.format(java.util.Locale.US, "%.1f", speed));
+        }
+        fileList = new ArrayList<>(historyFolders);
+        txtHeader.setText("היסטוריה – תיקיות שמע אחרונות");
+        listView.setVisibility(android.view.View.VISIBLE);
+        progressBar.setVisibility(android.view.View.GONE);
+        setListAdapter();
+    }
+
+    private void rememberFolder(File folder, File track) {
+        if (folder == null || track == null) return;
+        String key = folderKey(folder);
+        String old = prefs.getString("folder_history_v2", "");
+        ArrayList<String> paths = new ArrayList<>();
+        paths.add(folder.getAbsolutePath());
+        for (String p : old.split("\\n"))
+            if (p.length() > 0 && !p.equals(folder.getAbsolutePath()) && paths.size() < 40) paths.add(p);
+        StringBuilder b = new StringBuilder();
+        for (String p : paths) { if (b.length() > 0) b.append("\n"); b.append(p); }
+        prefs.edit().putString("folder_history_v2", b.toString())
+                .putString(key + "_track", track.getAbsolutePath()).apply();
+    }
+
+    private void activatePosition(int position) {
+        if (screenPage == 2) {
+            if (position < 0 || position >= historyFolders.size()) return;
+            File folder = historyFolders.get(position);
+            String trackPath = prefs.getString(folderKey(folder) + "_track", "");
+            loadDirectory(folder);
+            File track = new File(trackPath);
+            if (track.exists() && isAudioFile(track)) playAudioFile(track);
+            return;
+        }
+        if (screenPage != 0 || position < 0 || position >= fileList.size()) return;
+        File selected = fileList.get(position);
+        if (selected.isDirectory()) loadDirectory(selected);
+        else if (isAudioFile(selected)) playAudioFile(selected);
+    }
+
+    private void playAudioFile(final File file) {
+        if (file == null || !file.exists()) return;
+        if (audioPlayer != null) {
+            saveCurrentPosition();
+            audioPlayer.stop();
+            audioPlayer = null;
+        }
         currentAudioFile = file;
-        rememberInHistory(file.getParentFile() == null ? file : file.getParentFile());
+        currentDir = file.getParentFile();
+        rememberFolder(currentDir, file);
+        String key = folderKey(currentDir);
+        currentSpeed = Math.max(0.5f, Math.min(5.0f,
+                prefs.getFloat(key + "_speed", prefs.getFloat("global_speed", currentSpeed))));
+        int savedPos = forcedStartPosition >= 0 ? forcedStartPosition :
+                prefs.getInt(file.getAbsolutePath() + "_pos", 0);
+        forcedStartPosition = -1;
         currentDurationMs = 0;
-        txtTime.setText("00:00 / --:--");
+        lastPersistedPosition = savedPos;
+        txtTime.setText(formatTime(savedPos) + " / --:--");
         txtCurrentFile.setText(file.getName());
+        txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
         showPlayerPage();
         try {
-            if (audioPlayer != null) audioPlayer.stop();
-            currentSpeed = prefs.getFloat("global_speed", currentSpeed);
-            currentSpeed = Math.max(0.5f, Math.min(5.0f, currentSpeed));
-            txtSpeed.setText("מהירות: " + currentSpeed + "x");
-            int savedPos = prefs.getInt(file.getAbsolutePath() + "_pos", 0);
+            audioManager.requestAudioFocus(audioFocusListener, AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN);
             audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
                     new SonicAudioPlayer.Listener() {
                 @Override public void onProgress(int positionMs) {
                     txtTime.setText(formatTime(positionMs) + " / " + formatTime(currentDurationMs));
-                    if (progressBar != null && currentDurationMs > 0) progressBar.setProgress((int)(1000L * positionMs / currentDurationMs));
+                    if (currentDurationMs > 0)
+                        progressBar.setProgress((int)Math.max(0, Math.min(1000,
+                                1000L * positionMs / currentDurationMs)));
+                    if (positionMs - lastPersistedPosition >= 5000) {
+                        lastPersistedPosition = positionMs;
+                        persistFolderPosition(positionMs);
+                    }
+                    if (abEndMs > abStartMs && abStartMs >= 0 && positionMs >= abEndMs && !abLoopRestarting) {
+                        abLoopRestarting = true;
+                        restartAtPosition(abStartMs);
+                    }
                 }
                 @Override public void onDuration(int durationMs) {
                     currentDurationMs = durationMs;
-                    if (progressBar != null) progressBar.setProgress(0);
+                    progressBar.setProgress(0);
+                    txtTime.setText(formatTime(audioPlayer == null ? 0 : audioPlayer.getPositionMs()) +
+                            " / " + formatTime(currentDurationMs));
                 }
                 @Override public void onCompleted() {
                     isPlaying = false;
                     audioPlayer = null;
-                    PlaybackKeepAliveService.stop(MainActivity.this);
-                    playNextInDir();
+                    if (!playNextInDir()) {
+                        PlaybackKeepAliveService.stop(MainActivity.this);
+                        audioManager.abandonAudioFocus(audioFocusListener);
+                    }
                 }
                 @Override public void onError(Exception error) {
                     isPlaying = false;
                     audioPlayer = null;
                     PlaybackKeepAliveService.stop(MainActivity.this);
-                    Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                    audioManager.abandonAudioFocus(audioFocusListener);
+                    Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(),
+                            Toast.LENGTH_LONG).show();
                 }
             });
             audioPlayer.start(savedPos);
-            PlaybackKeepAliveService.start(this, file.getName());
+            abLoopRestarting = false;
             isPlaying = true;
-            prefs.edit().putString("last_played", file.getAbsolutePath()).apply();
+            PlaybackKeepAliveService.start(this, file.getName());
+            prefs.edit().putString("last_played", file.getAbsolutePath()).putFloat("global_speed", currentSpeed).apply();
         } catch (Exception e) {
-            Toast.makeText(this, "שגיאה בנגינת קובץ", Toast.LENGTH_SHORT).show();
+            isPlaying = false;
+            PlaybackKeepAliveService.stop(this);
+            Toast.makeText(this, "שגיאה בפתיחת הרצועה: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void persistFolderPosition(int positionMs) {
+        if (currentAudioFile == null || currentDir == null) return;
+        String key = folderKey(currentDir);
+        prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", positionMs)
+                .putString(key + "_track", currentAudioFile.getAbsolutePath())
+                .putInt(key + "_pos", positionMs).putFloat(key + "_speed", currentSpeed)
+                .putFloat("global_speed", currentSpeed).apply();
+    }
+
+    private void saveCurrentPosition() {
+        if (audioPlayer != null && currentAudioFile != null) {
+            persistFolderPosition(audioPlayer.getPositionMs());
         }
     }
 
     private String formatTime(int milliseconds) {
-        int totalSeconds = Math.max(0, milliseconds) / 1000;
-        return String.format(java.util.Locale.US, "%02d:%02d", totalSeconds / 60, totalSeconds % 60);
+        int seconds = Math.max(0, milliseconds) / 1000;
+        return String.format(java.util.Locale.US, "%02d:%02d", seconds / 60, seconds % 60);
     }
 
     private void pauseAudio() {
         if (audioPlayer != null && isPlaying) {
             audioPlayer.pause();
-            PlaybackKeepAliveService.stop(this);
             isPlaying = false;
             saveCurrentPosition();
+            PlaybackKeepAliveService.pause(this);
         }
     }
 
     private void resumeWithSmartJump() {
         if (audioPlayer != null && !isPlaying) {
             audioPlayer.resume();
-            PlaybackKeepAliveService.start(this, currentAudioFile == null ? "ניגון מוזיקה" : currentAudioFile.getName());
             isPlaying = true;
-        } else if (currentAudioFile != null) {
+            PlaybackKeepAliveService.start(this, currentAudioFile == null ? null : currentAudioFile.getName());
+        } else if (currentAudioFile != null && !isPlaying) {
             playAudioFile(currentAudioFile);
         }
     }
 
-    private void saveCurrentPosition() {
-        if (audioPlayer != null && currentAudioFile != null) {
-            prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", audioPlayer.getPositionMs())
-                    .putFloat(currentAudioFile.getAbsolutePath() + "_speed", currentSpeed)
-                    .putFloat("global_speed", currentSpeed).apply();
-        }
-    }
-
-    private void playNextInDir() {
-        if (fileList == null || currentAudioFile == null) return;
-        for (int i = 0; i < fileList.size(); i++) {
-            if (fileList.get(i).equals(currentAudioFile)) {
-                for (int step = 1; step < fileList.size(); step++) {
-                    int j = (i + step) % fileList.size();
-                    if (isAudioFile(fileList.get(j))) {
-                        playAudioFile(fileList.get(j));
-                        listView.setSelection(j);
-                        return;
-                    }
-                }
-                break;
+    private boolean playNextInDir() {
+        if (currentAudioFile == null) return false;
+        if (recursiveQueue != null && !recursiveQueue.isEmpty()) {
+            int index = recursiveQueue.indexOf(currentAudioFile);
+            if (index >= 0 && index + 1 < recursiveQueue.size()) {
+                recursiveIndex = index + 1;
+                playAudioFile(recursiveQueue.get(recursiveIndex));
+                return true;
             }
+            return false;
+        }
+        List<File> audios = listAudioFiles(currentDir);
+        int index = audios.indexOf(currentAudioFile);
+        if (index >= 0 && audios.size() > 1) {
+            playAudioFile(audios.get((index + 1) % audios.size()));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean playPrevInDir() {
+        if (currentAudioFile == null) return false;
+        if (recursiveQueue != null && !recursiveQueue.isEmpty()) {
+            int index = recursiveQueue.indexOf(currentAudioFile);
+            if (index > 0) { playAudioFile(recursiveQueue.get(index - 1)); return true; }
+            return false;
+        }
+        List<File> audios = listAudioFiles(currentDir);
+        int index = audios.indexOf(currentAudioFile);
+        if (index >= 0 && audios.size() > 1) {
+            playAudioFile(audios.get((index - 1 + audios.size()) % audios.size()));
+            return true;
+        }
+        return false;
+    }
+
+    private List<File> listAudioFiles(File folder) {
+        List<File> audios = new ArrayList<>();
+        if (folder == null) return audios;
+        File[] files = folder.listFiles();
+        if (files != null) for (File f : files) if (f.isFile() && isAudioFile(f)) audios.add(f);
+        Collections.sort(audios);
+        return audios;
+    }
+
+    private void collectRecursive(File folder, List<File> result) {
+        if (folder == null || !folder.isDirectory() || !folder.canRead()) return;
+        File[] files = folder.listFiles();
+        if (files == null) return;
+        List<File> entries = new ArrayList<>();
+        for (File f : files) {
+            if (f.getName().startsWith(".") || isSystemFolder(f)) continue;
+            if (f.isDirectory() || (f.isFile() && isAudioFile(f))) entries.add(f);
+        }
+        Collections.sort(entries);
+        for (File f : entries) {
+            if (f.isDirectory()) collectRecursive(f, result);
+            else result.add(f);
         }
     }
 
-    private void playPrevInDir() {
-        if (fileList == null || currentAudioFile == null) return;
-        for (int i = 0; i < fileList.size(); i++) {
-            if (fileList.get(i).equals(currentAudioFile)) {
-                for (int step = 1; step < fileList.size(); step++) {
-                    int j = (i - step + fileList.size()) % fileList.size();
-                    if (isAudioFile(fileList.get(j))) {
-                        playAudioFile(fileList.get(j));
-                        listView.setSelection(j);
-                        return;
-                    }
-                }
-                break;
-            }
+    private void startRecursiveFolder(File folder) {
+        recursiveQueue = new ArrayList<>();
+        collectRecursive(folder, recursiveQueue);
+        recursiveIndex = 0;
+        if (recursiveQueue.isEmpty()) {
+            Toast.makeText(this, "לא נמצאו קובצי שמע בתיקייה", Toast.LENGTH_SHORT).show();
+            recursiveQueue = null;
+            return;
+        }
+        currentDir = folder;
+        Toast.makeText(this, "ניגון כל תתי־התיקיות לפי הסדר", Toast.LENGTH_SHORT).show();
+        playAudioFile(recursiveQueue.get(0));
+    }
+
+    private void restartAtPosition(int positionMs) {
+        if (currentAudioFile == null) return;
+        forcedStartPosition = Math.max(0, positionMs);
+        playAudioFile(currentAudioFile);
+    }
+
+    private void markABPoint() {
+        if (audioPlayer == null || !isPlaying) return;
+        int position = audioPlayer.getPositionMs();
+        if (abStartMs < 0 || abEndMs >= 0) {
+            abStartMs = position;
+            abEndMs = -1;
+            Toast.makeText(this, "נקודת A נשמרה: " + formatTime(position), Toast.LENGTH_SHORT).show();
+        } else if (position > abStartMs) {
+            abEndMs = position;
+            Toast.makeText(this, "נקודת B נשמרה – חזרה בין A ל־B", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "נקודת B חייבת להיות אחרי A", Toast.LENGTH_SHORT).show();
         }
     }
 
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
+    @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_UP:
-                moveSelection(-1);
-                return true;
-
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                moveSelection(1);
-                return true;
-
+            case KeyEvent.KEYCODE_DPAD_UP: moveSelection(-1); return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN: moveSelection(1); return true;
             case KeyEvent.KEYCODE_STAR:
-                activateSelectedItem();
+                if (screenPage == 1) markABPoint();
+                else { event.startTracking(); activateSelectedItem(); }
                 return true;
-
             case KeyEvent.KEYCODE_5:
             case KeyEvent.KEYCODE_DPAD_CENTER:
-                if (audioPlayer == null && currentAudioFile == null) {
-                    activateSelectedItem();
-                } else if (isPlaying) {
-                    pauseAudio();
-                } else {
-                    resumeWithSmartJump();
-                }
+                if (audioPlayer == null && currentAudioFile == null) activateSelectedItem();
+                else if (isPlaying) pauseAudio(); else resumeWithSmartJump();
                 return true;
-
             case KeyEvent.KEYCODE_1:
-                if (audioPlayer != null) {
-                    int pos = audioPlayer.getPositionMs() - 5000;
-                    restartAtPosition(Math.max(0, pos));
-                }
+                if (audioPlayer != null) restartAtPosition(Math.max(0, audioPlayer.getPositionMs() - 5000));
                 return true;
-
             case KeyEvent.KEYCODE_3:
-                if (audioPlayer != null) {
-                    int pos = audioPlayer.getPositionMs() + 5000;
-                    restartAtPosition(pos);
-                }
+                if (audioPlayer != null) restartAtPosition(audioPlayer.getPositionMs() + 5000);
                 return true;
-
             case KeyEvent.KEYCODE_2:
-                if (!isPlaying) {
-                    moveSelection(-1);
-                } else {
-                    AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-                    am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI);
-                }
+                if (!isPlaying) moveSelection(-1);
+                else audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI);
                 return true;
-
             case KeyEvent.KEYCODE_8:
-                if (!isPlaying) {
-                    moveSelection(1);
-                } else {
-                    AudioManager amDown = (AudioManager) getSystemService(AUDIO_SERVICE);
-                    amDown.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
-                }
+                if (!isPlaying) moveSelection(1);
+                else audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
                 return true;
-
             case KeyEvent.KEYCODE_7:
-                if (currentSpeed > 0.5f) {
-                    currentSpeed = Math.max(0.5f, Math.round((currentSpeed - 0.1f) * 10f) / 10f);
-                    txtSpeed.setText("מהירות: " + currentSpeed + "x");
-                    if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
-                    prefs.edit().putFloat("global_speed", currentSpeed).apply();
-                    saveCurrentPosition();
-                }
+                currentSpeed = Math.max(0.5f, Math.round((currentSpeed - 0.1f) * 10f) / 10f);
+                updateSpeed();
                 return true;
-
             case KeyEvent.KEYCODE_9:
-                if (currentSpeed < 5.0f) {
-                    currentSpeed = Math.min(5.0f, Math.round((currentSpeed + 0.1f) * 10f) / 10f);
-                    txtSpeed.setText("מהירות: " + currentSpeed + "x");
-                    if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
-                    prefs.edit().putFloat("global_speed", currentSpeed).apply();
-                    saveCurrentPosition();
-                }
+                currentSpeed = Math.min(5.0f, Math.round((currentSpeed + 0.1f) * 10f) / 10f);
+                updateSpeed();
                 return true;
-
             case KeyEvent.KEYCODE_0:
                 currentSpeed = 1.0f;
-                txtSpeed.setText("מהירות: 1.0x");
-                if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
-                prefs.edit().putFloat("global_speed", currentSpeed).apply();
-                saveCurrentPosition();
+                updateSpeed();
                 return true;
-
             case KeyEvent.KEYCODE_4:
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-                playPrevInDir();
-                return true;
-
+            case KeyEvent.KEYCODE_DPAD_LEFT: playPrevInDir(); return true;
             case KeyEvent.KEYCODE_6:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                playNextInDir();
-                return true;
-
+            case KeyEvent.KEYCODE_DPAD_RIGHT: playNextInDir(); return true;
             case KeyEvent.KEYCODE_POUND:
                 if (screenPage == 0) showPlayerPage();
                 else if (screenPage == 1) showHistoryPage();
+                else if (currentDir != null && currentDir.exists()) loadDirectory(currentDir);
                 else loadStorageRoots();
                 return true;
-
         }
         return super.onKeyDown(keyCode, event);
     }
 
+    @Override public boolean onKeyLongPress(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_STAR && screenPage == 0) {
+            int pos = listView.getSelectedItemPosition();
+            if (pos >= 0 && pos < fileList.size() && fileList.get(pos).isDirectory()) {
+                startRecursiveFolder(fileList.get(pos));
+                return true;
+            }
+        }
+        return super.onKeyLongPress(keyCode, event);
+    }
+
+    private void updateSpeed() {
+        if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
+        txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
+        if (currentDir != null) prefs.edit().putFloat(folderKey(currentDir) + "_speed", currentSpeed).apply();
+        prefs.edit().putFloat("global_speed", currentSpeed).apply();
+        saveCurrentPosition();
+    }
+
     private void moveSelection(int delta) {
+        if (listView.getVisibility() != android.view.View.VISIBLE) return;
         int count = listView.getCount();
         if (count <= 0) return;
         int current = listView.getSelectedItemPosition();
@@ -423,26 +558,12 @@ public class MainActivity extends Activity {
 
     private void activateSelectedItem() {
         int position = listView.getSelectedItemPosition();
-        if (position < 0 || fileList == null || position >= fileList.size()) return;
-        File selected = fileList.get(position);
-        if (selected.isDirectory()) {
-            currentDir = selected;
-            loadDirectory(selected);
-        } else if (isAudioFile(selected)) {
-            playAudioFile(selected);
-        }
+        activatePosition(position);
     }
 
-    private void restartAtPosition(int positionMs) {
-        if (currentAudioFile == null) return;
-        prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", positionMs).apply();
-        playAudioFile(currentAudioFile);
-    }
-
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         saveCurrentPosition();
-        // Playback is owned by the foreground keep-alive service; do not stop audio when the UI closes.
+        // The foreground service and playback worker continue after the UI is closed.
         super.onDestroy();
     }
 }
