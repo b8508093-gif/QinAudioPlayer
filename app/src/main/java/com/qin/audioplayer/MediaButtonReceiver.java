@@ -12,6 +12,7 @@ public class MediaButtonReceiver extends BroadcastReceiver {
     public static final String ACTION_PREVIOUS = "com.qin.audioplayer.PREVIOUS";
     public static final String ACTION_STOP = "com.qin.audioplayer.STOP";
     public static final String ACTION_PAUSE = "com.qin.audioplayer.PAUSE";
+    public static final String ACTION_RESUME = "com.qin.audioplayer.RESUME";
 
     @Override public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
@@ -21,11 +22,12 @@ public class MediaButtonReceiver extends BroadcastReceiver {
             if (event == null || event.getAction() != KeyEvent.ACTION_DOWN) return;
             switch (event.getKeyCode()) {
                 case KeyEvent.KEYCODE_MEDIA_PLAY:
+                    MainActivity.handleExternalCommand(context, ACTION_RESUME); break;
                 case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                 case KeyEvent.KEYCODE_HEADSETHOOK:
                     MainActivity.handleExternalCommand(context, ACTION_PLAY_PAUSE); break;
                 case KeyEvent.KEYCODE_MEDIA_PAUSE:
-                    MainActivity.handleExternalCommand(context, ACTION_PLAY_PAUSE); break;
+                    MainActivity.handleExternalCommand(context, ACTION_PAUSE); break;
                 case KeyEvent.KEYCODE_MEDIA_NEXT:
                     MainActivity.handleExternalCommand(context, ACTION_NEXT); break;
                 case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
