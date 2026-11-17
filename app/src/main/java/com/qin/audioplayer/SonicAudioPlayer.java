@@ -96,6 +96,7 @@ public final class SonicAudioPlayer {
     }
 
     private void decodeAndPlay(int startMs) {
+        positionMs = Math.max(0, startMs);
         MediaExtractor extractor = new MediaExtractor();
         MediaCodec decoder = null;
         Sonic sonic = null;
