@@ -11,6 +11,7 @@ public class MediaButtonReceiver extends BroadcastReceiver {
     public static final String ACTION_NEXT = "com.qin.audioplayer.NEXT";
     public static final String ACTION_PREVIOUS = "com.qin.audioplayer.PREVIOUS";
     public static final String ACTION_STOP = "com.qin.audioplayer.STOP";
+    public static final String ACTION_PAUSE = "com.qin.audioplayer.PAUSE";
 
     @Override public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
@@ -34,7 +35,7 @@ public class MediaButtonReceiver extends BroadcastReceiver {
             }
             abortBroadcast();
         } else if ("android.media.AUDIO_BECOMING_NOISY".equals(action)) {
-            MainActivity.handleExternalCommand(context, ACTION_PLAY_PAUSE);
+            MainActivity.handleExternalCommand(context, ACTION_PAUSE);
         } else {
             MainActivity.handleExternalCommand(context, action);
         }
