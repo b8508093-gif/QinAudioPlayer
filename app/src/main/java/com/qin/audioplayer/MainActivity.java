@@ -529,15 +529,23 @@ public class MainActivity extends Activity {
     private void markABPoint() {
         if (audioPlayer == null) return;
         int position = audioPlayer.getPositionMs();
-        if (abStartMs < 0 || abEndMs >= 0) {
+        if (abStartMs < 0) {
             abStartMs = position;
             abEndMs = -1;
+            abLoopRestarting = false;
             Toast.makeText(this, "נקודת A נשמרה: " + formatTime(position), Toast.LENGTH_SHORT).show();
-        } else if (position > abStartMs) {
-            abEndMs = position;
-            Toast.makeText(this, "נקודת B נשמרה – חזרה בין A ל־B", Toast.LENGTH_SHORT).show();
+        } else if (abEndMs < 0) {
+            if (position > abStartMs) {
+                abEndMs = position;
+                Toast.makeText(this, "נקודת B נשמרה – חזרה בין A ל־B", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "נקודת B חייבת להיות אחרי A", Toast.LENGTH_SHORT).show();
+            }
         } else {
-            Toast.makeText(this, "נקודת B חייבת להיות אחרי A", Toast.LENGTH_SHORT).show();
+            abStartMs = -1;
+            abEndMs = -1;
+            abLoopRestarting = false;
+            Toast.makeText(this, "חזרה A–B בוטלה", Toast.LENGTH_SHORT).show();
         }
     }
 
