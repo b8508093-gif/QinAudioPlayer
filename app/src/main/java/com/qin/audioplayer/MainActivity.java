@@ -284,6 +284,8 @@ public class MainActivity extends Activity {
             audioPlayer.stopAndWait();
             audioPlayer = null;
         }
+        File previousTrack = currentAudioFile;
+        if (previousTrack != null && !previousTrack.equals(file)) { abStartMs = -1; abEndMs = -1; abLoopRestarting = false; }
         currentAudioFile = file;
         if (recursiveQueue != null && !recursiveQueue.contains(file)) { recursiveQueue = null; recursiveRoot = null; }
         playbackDir = recursiveQueue != null && recursiveRoot != null ? recursiveRoot : file.getParentFile();
