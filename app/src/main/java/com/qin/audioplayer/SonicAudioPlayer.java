@@ -66,6 +66,13 @@ public final class SonicAudioPlayer {
         if (audioTrack != null) audioTrack.play();
     }
 
+    public void stopAndWait() {
+        stop();
+        if (worker != null && worker != Thread.currentThread()) {
+            try { worker.join(1200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
     public void stop() {
         stopped.set(true);
         synchronized (pauseLock) {
@@ -123,6 +130,9 @@ public final class SonicAudioPlayer {
             ByteBuffer[] outputBuffers = decoder.getOutputBuffers();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             boolean inputDone = false, outputDone = false;
+            long sourceFramesSubmitted = 0L;
+            long outputFramesWritten = 0L;
+            int lastProgressReport = -1;
             int sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
             int channels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
             int channelMask = channels == 1 ? AudioFormat.CHANNEL_OUT_MONO : AudioFormat.CHANNEL_OUT_STEREO;
@@ -184,13 +194,29 @@ public final class SonicAudioPlayer {
                         output.limit(info.offset + info.size);
                         byte[] pcm = new byte[info.size];
                         output.get(pcm);
+                        sourceFramesSubmitted += pcm.length / (2L * channels);
                         sonic.setSpeed(speed);
                         sonic.writeBytesToStream(pcm, pcm.length);
                         int count;
                         while ((count = sonic.readBytesFromStream(processed, processed.length)) > 0) {
                             waitIfPaused();
                             if (stopped.get()) break;
-                            audioTrack.write(processed, 0, count);
+                             int written =  int written = audioTrack.write(processed, 0, count);
+                            if (written < 0) throw new IOException("AudioTrack write failed: " + written);
+                            if (written < 0) throw new IOException("AudioTrack write failed: " + written);
+                            outputFramesWritten += written / (2L * channels);
+                            int playedFrames = audioTrack.getPlaybackHeadPosition();
+                            if (outputFramesWritten > 0 && sourceFramesSubmitted > 0) {
+                                positionMs = startMs + (int)(playedFrames * sourceFramesSubmitted * 1000L /
+                                        (outputFramesWritten * (long)sampleRate));
+                                if (positionMs - lastProgressReport >= 250) {
+                                    lastProgressReport = positionMs;
+                                    final int progress = positionMs;
+                                    main.post(new Runnable() { @Override public void run() {
+                                        if (!stopped.get()) listener.onProgress(progress);
+                                    }});
+                                }
+                            }
                         }
                     }
                     if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
