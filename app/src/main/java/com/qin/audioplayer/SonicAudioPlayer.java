@@ -201,8 +201,7 @@ public final class SonicAudioPlayer {
                         while ((count = sonic.readBytesFromStream(processed, processed.length)) > 0) {
                             waitIfPaused();
                             if (stopped.get()) break;
-                             int written =  int written = audioTrack.write(processed, 0, count);
-                            if (written < 0) throw new IOException("AudioTrack write failed: " + written);
+                             int written = audioTrack.write(processed, 0, count);
                             if (written < 0) throw new IOException("AudioTrack write failed: " + written);
                             outputFramesWritten += written / (2L * channels);
                             int playedFrames = audioTrack.getPlaybackHeadPosition();
@@ -224,7 +223,8 @@ public final class SonicAudioPlayer {
                         int count;
                         while ((count = sonic.readBytesFromStream(processed, processed.length)) > 0 && !stopped.get()) {
                             waitIfPaused();
-                            audioTrack.write(processed, 0, count);
+                            int flushed = audioTrack.write(processed, 0, count);
+                            if (flushed < 0) throw new IOException("AudioTrack flush write failed: " + flushed);
                         }
                         outputDone = true;
                     }
