@@ -7,6 +7,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
+import android.media.RemoteControlClient;
+import android.media.MediaMetadataEditor;
 import android.os.IBinder;
 import android.os.PowerManager;
 
@@ -18,6 +20,7 @@ public class PlaybackKeepAliveService extends Service {
     private PowerManager.WakeLock wakeLock;
     private AudioManager audioManager;
     private boolean receiverRegistered;
+    private RemoteControlClient remoteControlClient;
 
     public static void start(Context c, String title) { send(c, ACTION_START, title); }
     public static void pause(Context c) { send(c, ACTION_PAUSE, null); }
@@ -34,6 +37,18 @@ public class PlaybackKeepAliveService extends Service {
         try {
             audioManager.registerMediaButtonEventReceiver(new ComponentName(this, MediaButtonReceiver.class));
             receiverRegistered = true;
+            Intent mediaIntent = new Intent(Intent.ACTION_MEDIA_BUTTON);
+            mediaIntent.setComponent(new ComponentName(this, MediaButtonReceiver.class));
+            PendingIntent mediaPendingIntent = PendingIntent.getBroadcast(this, 0, mediaIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+            remoteControlClient = new RemoteControlClient(mediaPendingIntent);
+            remoteControlClient.setTransportControlFlags(
+                    RemoteControlClient.FLAG_KEY_MEDIA_PLAY |
+                    RemoteControlClient.FLAG_KEY_MEDIA_PAUSE |
+                    RemoteControlClient.FLAG_KEY_MEDIA_PLAY_PAUSE |
+                    RemoteControlClient.FLAG_KEY_MEDIA_STOP |
+                    RemoteControlClient.FLAG_KEY_MEDIA_NEXT |
+                    RemoteControlClient.FLAG_KEY_MEDIA_PREVIOUS);
+            audioManager.registerRemoteControlClient(remoteControlClient);
         } catch (Exception ignored) {}
     }
 
@@ -56,6 +71,15 @@ public class PlaybackKeepAliveService extends Service {
     }
 
     private void showNotification(String title, boolean playing) {
+        if (remoteControlClient != null) {
+            try {
+                RemoteControlClient.MetadataEditor editor = remoteControlClient.editMetadata(true);
+                if (title != null) editor.putString(MediaMetadataEditor.METADATA_KEY_TITLE, title);
+                editor.apply();
+                remoteControlClient.setPlaybackState(playing ? RemoteControlClient.PLAYSTATE_PLAYING :
+                        RemoteControlClient.PLAYSTATE_PAUSED);
+            } catch (Exception ignored) {}
+        }
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent content = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT);
@@ -94,6 +118,7 @@ public class PlaybackKeepAliveService extends Service {
         releaseWakeLock();
         if (receiverRegistered) try {
             audioManager.unregisterMediaButtonEventReceiver(new ComponentName(this, MediaButtonReceiver.class));
+            if (remoteControlClient != null) audioManager.unregisterRemoteControlClient(remoteControlClient);
         } catch (Exception ignored) {}
         super.onDestroy();
     }
