@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
 import android.media.RemoteControlClient;
+import android.media.MediaMetadataRetriever;
 import android.os.IBinder;
 import android.os.PowerManager;
 
@@ -73,7 +74,7 @@ public class PlaybackKeepAliveService extends Service {
         if (remoteControlClient != null) {
             try {
                 RemoteControlClient.MetadataEditor editor = remoteControlClient.editMetadata(true);
-                if (title != null) editor.putString(RemoteControlClient.MetadataEditor.METADATA_KEY_TITLE, title);
+                if (title != null) editor.putString(MediaMetadataRetriever.METADATA_KEY_TITLE, title);
                 editor.apply();
                 remoteControlClient.setPlaybackState(playing ? RemoteControlClient.PLAYSTATE_PLAYING :
                         RemoteControlClient.PLAYSTATE_PAUSED);
