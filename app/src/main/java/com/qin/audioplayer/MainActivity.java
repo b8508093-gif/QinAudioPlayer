@@ -35,7 +35,9 @@ public class MainActivity extends Activity {
     private List<String> itemNames = new ArrayList<>();
     private List<File> historyFolders = new ArrayList<>();
     private List<File> recursiveQueue;
+    private File recursiveRoot;
     private int recursiveIndex = -1;
+    private boolean starLongPressHandled;
 
     private SonicAudioPlayer audioPlayer;
     private int currentDurationMs;
@@ -72,6 +74,8 @@ public class MainActivity extends Activity {
         if (a == null || command == null) return;
         if (MediaButtonReceiver.ACTION_PLAY_PAUSE.equals(command)) {
             if (a.isPlaying) a.pauseAudio(); else a.resumeWithSmartJump();
+        } else if (MediaButtonReceiver.ACTION_RESUME.equals(command)) {
+            a.resumeWithSmartJump();
         } else if (MediaButtonReceiver.ACTION_PAUSE.equals(command)) {
             if (a.isPlaying) a.pauseAudio();
         } else if (MediaButtonReceiver.ACTION_NEXT.equals(command)) {
@@ -103,7 +107,7 @@ public class MainActivity extends Activity {
             @Override public void onCallStateChanged(int state, String number) {
                 if (state == TelephonyManager.CALL_STATE_RINGING ||
                         state == TelephonyManager.CALL_STATE_OFFHOOK) {
-                    wasPlayingBeforeCall = isPlaying;
+                    if (!isPhoneCalling) wasPlayingBeforeCall = isPlaying;
                     isPhoneCalling = true;
                     if (isPlaying) pauseAudio();
                 } else if (state == TelephonyManager.CALL_STATE_IDLE && isPhoneCalling) {
@@ -165,6 +169,7 @@ public class MainActivity extends Activity {
         currentDir = dir;
         screenPage = 0;
         recursiveQueue = null;
+        recursiveRoot = null;
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
         boolean storageRoot = dir.getParent() != null &&
@@ -267,11 +272,11 @@ public class MainActivity extends Activity {
         if (file == null || !file.exists()) return;
         if (audioPlayer != null) {
             saveCurrentPosition();
-            audioPlayer.stop();
+            audioPlayer.stopAndWait();
             audioPlayer = null;
         }
         currentAudioFile = file;
-        currentDir = file.getParentFile();
+        currentDir = recursiveQueue != null && recursiveRoot != null ? recursiveRoot : file.getParentFile();
         rememberFolder(currentDir, file);
         String key = folderKey(currentDir);
         currentSpeed = Math.max(0.5f, Math.min(5.0f,
@@ -440,12 +445,14 @@ public class MainActivity extends Activity {
     }
 
     private void startRecursiveFolder(File folder) {
+        recursiveRoot = folder;
         recursiveQueue = new ArrayList<>();
         collectRecursive(folder, recursiveQueue);
         recursiveIndex = 0;
         if (recursiveQueue.isEmpty()) {
             Toast.makeText(this, "לא נמצאו קובצי שמע בתיקייה", Toast.LENGTH_SHORT).show();
             recursiveQueue = null;
+            recursiveRoot = null;
             return;
         }
         currentDir = folder;
@@ -480,7 +487,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_DOWN: moveSelection(1); return true;
             case KeyEvent.KEYCODE_STAR:
                 if (screenPage == 1) markABPoint();
-                else { event.startTracking(); activateSelectedItem(); }
+                else { starLongPressHandled = false; event.startTracking(); }
                 return true;
             case KeyEvent.KEYCODE_5:
             case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -527,8 +534,17 @@ public class MainActivity extends Activity {
         return super.onKeyDown(keyCode, event);
     }
 
+    @Override public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_STAR && screenPage != 1) {
+            if (!starLongPressHandled) activateSelectedItem();
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
+    }
+
     @Override public boolean onKeyLongPress(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_STAR && screenPage == 0) {
+            starLongPressHandled = true;
             int pos = listView.getSelectedItemPosition();
             if (pos >= 0 && pos < fileList.size() && fileList.get(pos).isDirectory()) {
                 startRecursiveFolder(fileList.get(pos));
