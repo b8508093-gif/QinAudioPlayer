@@ -1,61 +1,82 @@
 package com.qin.audioplayer;
 
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
+import android.media.AudioManager;
 import android.os.IBinder;
 import android.os.PowerManager;
 
-/** Keeps the playback process in the foreground while audio is playing (Android 4.4+). */
 public class PlaybackKeepAliveService extends Service {
     public static final String ACTION_START = "com.qin.audioplayer.START_PLAYBACK";
+    public static final String ACTION_PAUSE = "com.qin.audioplayer.PAUSE_PLAYBACK";
     public static final String ACTION_STOP = "com.qin.audioplayer.STOP_PLAYBACK";
     private static final int NOTIFICATION_ID = 41;
     private PowerManager.WakeLock wakeLock;
+    private AudioManager audioManager;
+    private boolean receiverRegistered;
 
-    public static void start(Context context, String title) {
-        Intent i = new Intent(context, PlaybackKeepAliveService.class);
-        i.setAction(ACTION_START);
-        i.putExtra("title", title == null ? "ניגון מוזיקה" : title);
-        context.startService(i);
+    public static void start(Context c, String title) { send(c, ACTION_START, title); }
+    public static void pause(Context c) { send(c, ACTION_PAUSE, null); }
+    public static void stop(Context c) { send(c, ACTION_STOP, null); }
+    private static void send(Context c, String action, String title) {
+        Intent i = new Intent(c, PlaybackKeepAliveService.class).setAction(action);
+        if (title != null) i.putExtra("title", title);
+        c.startService(i);
     }
 
-    public static void stop(Context context) {
-        Intent i = new Intent(context, PlaybackKeepAliveService.class);
-        i.setAction(ACTION_STOP);
-        context.startService(i);
+    @Override public void onCreate() {
+        super.onCreate();
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        try {
+            audioManager.registerMediaButtonEventReceiver(new ComponentName(this, MediaButtonReceiver.class));
+            receiverRegistered = true;
+        } catch (Exception ignored) {}
     }
-
-    @Override public void onCreate() { super.onCreate(); }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+        String action = intent == null ? ACTION_START : intent.getAction();
+        if (ACTION_STOP.equals(action)) {
             releaseWakeLock();
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
         }
-        String title = intent == null ? "ניגון מוזיקה" : intent.getStringExtra("title");
-        Intent open = new Intent(this, MainActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pending = PendingIntent.getActivity(this, 0, open,
-                PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification notification = new Notification.Builder(this)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("נגן Qin")
-                .setContentText(title == null ? "מנגן ברקע" : title)
-                .setContentIntent(pending)
-                .setOngoing(true)
-                .build();
-        startForeground(NOTIFICATION_ID, notification);
+        if (ACTION_PAUSE.equals(action)) {
+            releaseWakeLock();
+            showNotification(intent == null ? "מושהה" : intent.getStringExtra("title"), false);
+            return START_STICKY;
+        }
         acquireWakeLock();
+        showNotification(intent == null ? null : intent.getStringExtra("title"), true);
         return START_STICKY;
     }
 
+    private void showNotification(String title, boolean playing) {
+        Intent open = new Intent(this, MainActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent content = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Builder b = new Notification.Builder(this)
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentTitle("נגן Qin")
+                .setContentText(title == null ? (playing ? "מנגן ברקע" : "מושהה") : title)
+                .setContentIntent(content)
+                .setOngoing(true)
+                .setPriority(Notification.PRIORITY_LOW);
+        b.addAction(android.R.drawable.ic_media_previous, "הקודם", command(MediaButtonReceiver.ACTION_PREVIOUS, 1));
+        b.addAction(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                playing ? "השהה" : "המשך", command(MediaButtonReceiver.ACTION_PLAY_PAUSE, 2));
+        b.addAction(android.R.drawable.ic_media_next, "הבא", command(MediaButtonReceiver.ACTION_NEXT, 3));
+        startForeground(NOTIFICATION_ID, b.build());
+    }
+
+    private PendingIntent command(String action, int requestCode) {
+        Intent i = new Intent(this, MediaButtonReceiver.class).setAction(action);
+        return PendingIntent.getBroadcast(this, requestCode, i, PendingIntent.FLAG_UPDATE_CURRENT);
+    }
     private void acquireWakeLock() {
         try {
             if (wakeLock == null) {
@@ -66,11 +87,15 @@ public class PlaybackKeepAliveService extends Service {
             if (!wakeLock.isHeld()) wakeLock.acquire();
         } catch (Exception ignored) {}
     }
-
     private void releaseWakeLock() {
         try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
     }
-
-    @Override public void onDestroy() { releaseWakeLock(); super.onDestroy(); }
+    @Override public void onDestroy() {
+        releaseWakeLock();
+        if (receiverRegistered) try {
+            audioManager.unregisterMediaButtonEventReceiver(new ComponentName(this, MediaButtonReceiver.class));
+        } catch (Exception ignored) {}
+        super.onDestroy();
+    }
     @Override public IBinder onBind(Intent intent) { return null; }
 }
