@@ -44,10 +44,26 @@ public final class SonicAudioPlayer {
     }
 
     public void start(final int startMs) {
+        start(startMs, null);
+    }
+
+    /** Starts only after the previous decoder/output worker has released its resources. */
+    public void start(final int startMs, final SonicAudioPlayer previous) {
         worker = new Thread(new Runnable() {
-            @Override public void run() { decodeAndPlay(startMs); }
+            @Override public void run() {
+                if (previous != null) previous.joinWorker();
+                if (!stopped.get()) decodeAndPlay(startMs);
+            }
         }, "Qin-Sonic-Playback");
         worker.start();
+    }
+
+    private void joinWorker() {
+        Thread oldWorker = worker;
+        if (oldWorker != null && oldWorker != Thread.currentThread()) {
+            try { oldWorker.join(); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
     }
 
     public void setSpeed(float value) { speed = Math.max(0.5f, Math.min(5.0f, value)); }
@@ -66,11 +82,10 @@ public final class SonicAudioPlayer {
         if (audioTrack != null) audioTrack.play();
     }
 
+    // Never wait for decoder shutdown on the UI thread. The next player's worker
+    // waits for this worker to release MediaCodec and AudioTrack before opening audio.
     public void stopAndWait() {
         stop();
-        if (worker != null && worker != Thread.currentThread()) {
-            try { worker.join(1200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        }
     }
 
     public void stop() {
@@ -79,8 +94,9 @@ public final class SonicAudioPlayer {
             paused = false;
             pauseLock.notifyAll();
         }
-        if (audioTrack != null) {
-            try { audioTrack.pause(); audioTrack.flush(); } catch (Exception ignored) {}
+        AudioTrack track = audioTrack;
+        if (track != null) {
+            try { track.pause(); } catch (Exception ignored) {}
         }
         if (worker != null) worker.interrupt();
     }
