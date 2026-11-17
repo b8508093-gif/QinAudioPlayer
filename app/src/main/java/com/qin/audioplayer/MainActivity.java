@@ -310,9 +310,10 @@ public class MainActivity extends Activity {
 
     private void playAudioFile(final File file) {
         if (file == null || !file.exists()) return;
-        if (audioPlayer != null) {
+        final SonicAudioPlayer previousPlayer = audioPlayer;
+        if (previousPlayer != null) {
             saveCurrentPosition();
-            audioPlayer.stopAndWait();
+            previousPlayer.stopAndWait();
             audioPlayer = null;
         }
         File previousTrack = currentAudioFile;
@@ -382,7 +383,7 @@ public class MainActivity extends Activity {
                             Toast.LENGTH_LONG).show();
                 }
             });
-            audioPlayer.start(savedPos);
+            audioPlayer.start(savedPos, previousPlayer);
             handler.removeCallbacks(uiRefresh);
             handler.post(uiRefresh);
             abLoopRestarting = false;
