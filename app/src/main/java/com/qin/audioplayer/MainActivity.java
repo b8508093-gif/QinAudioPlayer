@@ -340,39 +340,44 @@ public class MainActivity extends Activity {
             audioPlayer = new SonicAudioPlayer(file.getAbsolutePath(), currentSpeed,
                     new SonicAudioPlayer.Listener() {
                 @Override public void onProgress(int positionMs) {
-                    txtTime.setText(formatTime(positionMs) + " / " + formatTime(currentDurationMs));
-                    if (currentDurationMs > 0)
-                        progressBar.setProgress((int)Math.max(0, Math.min(1000,
-                                1000L * positionMs / currentDurationMs)));
-                    if (positionMs - lastPersistedPosition >= 5000) {
-                        lastPersistedPosition = positionMs;
-                        persistFolderPosition(positionMs);
+                    MainActivity ui = activeInstance == null ? MainActivity.this : activeInstance;
+                    ui.txtTime.setText(ui.formatTime(positionMs) + " / " + ui.formatTime(ui.currentDurationMs));
+                    if (ui.currentDurationMs > 0)
+                        ui.progressBar.setProgress((int)Math.max(0, Math.min(1000,
+                                1000L * positionMs / ui.currentDurationMs)));
+                    if (positionMs - ui.lastPersistedPosition >= 5000) {
+                        ui.lastPersistedPosition = positionMs;
+                        ui.persistFolderPosition(positionMs);
                     }
-                    if (abEndMs > abStartMs && abStartMs >= 0 && positionMs >= abEndMs && !abLoopRestarting) {
-                        abLoopRestarting = true;
-                        restartAtPosition(abStartMs);
+                    if (ui.abEndMs > ui.abStartMs && ui.abStartMs >= 0 &&
+                            positionMs >= ui.abEndMs && !ui.abLoopRestarting) {
+                        ui.abLoopRestarting = true;
+                        ui.restartAtPosition(ui.abStartMs);
                     }
                 }
                 @Override public void onDuration(int durationMs) {
-                    currentDurationMs = durationMs;
-                    progressBar.setProgress(0);
-                    txtTime.setText(formatTime(audioPlayer == null ? 0 : audioPlayer.getPositionMs()) +
-                            " / " + formatTime(currentDurationMs));
+                    MainActivity ui = activeInstance == null ? MainActivity.this : activeInstance;
+                    ui.currentDurationMs = durationMs;
+                    ui.progressBar.setProgress(0);
+                    ui.txtTime.setText(ui.formatTime(ui.audioPlayer == null ? 0 :
+                            ui.audioPlayer.getPositionMs()) + " / " + ui.formatTime(durationMs));
                 }
                 @Override public void onCompleted() {
-                    isPlaying = false;
-                    audioPlayer = null;
-                    if (!playNextInDir()) {
-                        PlaybackKeepAliveService.stop(MainActivity.this);
-                        audioManager.abandonAudioFocus(audioFocusListener);
+                    MainActivity ui = activeInstance == null ? MainActivity.this : activeInstance;
+                    ui.isPlaying = false;
+                    ui.audioPlayer = null;
+                    if (!ui.playNextInDir()) {
+                        PlaybackKeepAliveService.stop(ui);
+                        ui.audioManager.abandonAudioFocus(ui.audioFocusListener);
                     }
                 }
                 @Override public void onError(Exception error) {
-                    isPlaying = false;
-                    audioPlayer = null;
-                    PlaybackKeepAliveService.stop(MainActivity.this);
-                    audioManager.abandonAudioFocus(audioFocusListener);
-                    Toast.makeText(MainActivity.this, "שגיאה בנגינה: " + error.getMessage(),
+                    MainActivity ui = activeInstance == null ? MainActivity.this : activeInstance;
+                    ui.isPlaying = false;
+                    ui.audioPlayer = null;
+                    PlaybackKeepAliveService.stop(ui);
+                    ui.audioManager.abandonAudioFocus(ui.audioFocusListener);
+                    Toast.makeText(ui, "שגיאה בנגינה: " + error.getMessage(),
                             Toast.LENGTH_LONG).show();
                 }
             });
