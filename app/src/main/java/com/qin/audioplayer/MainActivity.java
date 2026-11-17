@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     private int screenPage = 0; // 0 folders, 1 player, 2 history
 
     private File currentDir;
+    private File playbackDir;
     private List<File> fileList = new ArrayList<>();
     private List<String> itemNames = new ArrayList<>();
     private List<File> historyFolders = new ArrayList<>();
@@ -168,8 +169,6 @@ public class MainActivity extends Activity {
         if (dir == null || !dir.isDirectory() || !dir.canRead()) return;
         currentDir = dir;
         screenPage = 0;
-        recursiveQueue = null;
-        recursiveRoot = null;
         fileList = new ArrayList<>();
         itemNames = new ArrayList<>();
         boolean storageRoot = dir.getParent() != null &&
@@ -276,8 +275,10 @@ public class MainActivity extends Activity {
             audioPlayer = null;
         }
         currentAudioFile = file;
-        currentDir = recursiveQueue != null && recursiveRoot != null ? recursiveRoot : file.getParentFile();
-        rememberFolder(currentDir, file);
+        if (recursiveQueue != null && !recursiveQueue.contains(file)) { recursiveQueue = null; recursiveRoot = null; }
+        playbackDir = recursiveQueue != null && recursiveRoot != null ? recursiveRoot : file.getParentFile();
+        currentDir = playbackDir;
+        rememberFolder(playbackDir, file);
         String key = folderKey(currentDir);
         currentSpeed = Math.max(0.5f, Math.min(5.0f,
                 prefs.getFloat(key + "_speed", prefs.getFloat("global_speed", currentSpeed))));
@@ -345,8 +346,8 @@ public class MainActivity extends Activity {
     }
 
     private void persistFolderPosition(int positionMs) {
-        if (currentAudioFile == null || currentDir == null) return;
-        String key = folderKey(currentDir);
+        if (currentAudioFile == null || playbackDir == null) return;
+        String key = folderKey(playbackDir);
         prefs.edit().putInt(currentAudioFile.getAbsolutePath() + "_pos", positionMs)
                 .putString(key + "_track", currentAudioFile.getAbsolutePath())
                 .putInt(key + "_pos", positionMs).putFloat(key + "_speed", currentSpeed)
@@ -394,7 +395,7 @@ public class MainActivity extends Activity {
             }
             return false;
         }
-        List<File> audios = listAudioFiles(currentDir);
+        List<File> audios = listAudioFiles(playbackDir);
         int index = audios.indexOf(currentAudioFile);
         if (index >= 0 && audios.size() > 1) {
             playAudioFile(audios.get((index + 1) % audios.size()));
@@ -455,6 +456,7 @@ public class MainActivity extends Activity {
             recursiveRoot = null;
             return;
         }
+        playbackDir = folder;
         currentDir = folder;
         Toast.makeText(this, "ניגון כל תתי־התיקיות לפי הסדר", Toast.LENGTH_SHORT).show();
         playAudioFile(recursiveQueue.get(0));
@@ -467,7 +469,7 @@ public class MainActivity extends Activity {
     }
 
     private void markABPoint() {
-        if (audioPlayer == null || !isPlaying) return;
+        if (audioPlayer == null) return;
         int position = audioPlayer.getPositionMs();
         if (abStartMs < 0 || abEndMs >= 0) {
             abStartMs = position;
@@ -527,6 +529,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_POUND:
                 if (screenPage == 0) showPlayerPage();
                 else if (screenPage == 1) showHistoryPage();
+                else if (isPlaying && playbackDir != null && playbackDir.exists()) loadDirectory(playbackDir);
                 else if (currentDir != null && currentDir.exists()) loadDirectory(currentDir);
                 else loadStorageRoots();
                 return true;
@@ -557,7 +560,7 @@ public class MainActivity extends Activity {
     private void updateSpeed() {
         if (audioPlayer != null) audioPlayer.setSpeed(currentSpeed);
         txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
-        if (currentDir != null) prefs.edit().putFloat(folderKey(currentDir) + "_speed", currentSpeed).apply();
+        if (playbackDir != null) prefs.edit().putFloat(folderKey(playbackDir) + "_speed", currentSpeed).apply();
         prefs.edit().putFloat("global_speed", currentSpeed).apply();
         saveCurrentPosition();
     }
