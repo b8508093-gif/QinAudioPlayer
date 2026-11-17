@@ -299,13 +299,13 @@ public class MainActivity extends Activity {
             String trackPath = prefs.getString(folderKey(folder) + "_track", "");
             loadDirectory(folder);
             File track = new File(trackPath);
-            if (track.exists() && isAudioFile(track)) playAudioFile(track);
+            if (track.exists() && isAudioFile(track)) { recursiveQueue = null; recursiveRoot = null; playAudioFile(track); }
             return;
         }
         if (screenPage != 0 || position < 0 || position >= fileList.size()) return;
         File selected = fileList.get(position);
         if (selected.isDirectory()) loadDirectory(selected);
-        else if (isAudioFile(selected)) playAudioFile(selected);
+        else if (isAudioFile(selected)) { recursiveQueue = null; recursiveRoot = null; playAudioFile(selected); }
     }
 
     private void playAudioFile(final File file) {
