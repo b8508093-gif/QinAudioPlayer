@@ -10,9 +10,13 @@
         android:label="נגן שמע Qin"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Black.NoTitleBar">
-        <service
-            android:name=".PlaybackKeepAliveService"
-            android:exported="false" />
+        <service android:name=".PlaybackKeepAliveService" android:exported="false" />
+        <receiver android:name=".MediaButtonReceiver" android:exported="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
