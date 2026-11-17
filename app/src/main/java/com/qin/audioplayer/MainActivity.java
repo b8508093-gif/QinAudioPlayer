@@ -411,7 +411,7 @@ public class MainActivity extends Activity {
             if (index > 0) { playAudioFile(recursiveQueue.get(index - 1)); return true; }
             return false;
         }
-        List<File> audios = listAudioFiles(currentDir);
+        List<File> audios = listAudioFiles(playbackDir);
         int index = audios.indexOf(currentAudioFile);
         if (index >= 0 && audios.size() > 1) {
             playAudioFile(audios.get((index - 1 + audios.size()) % audios.size()));
