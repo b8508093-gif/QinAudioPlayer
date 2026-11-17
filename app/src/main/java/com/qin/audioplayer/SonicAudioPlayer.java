@@ -201,10 +201,16 @@ public final class SonicAudioPlayer {
                         while ((count = sonic.readBytesFromStream(processed, processed.length)) > 0) {
                             waitIfPaused();
                             if (stopped.get()) break;
-                             int written = audioTrack.write(processed, 0, count);
-                            if (written < 0) throw new IOException("AudioTrack write failed: " + written);
-                            outputFramesWritten += written / (2L * channels);
-                            int playedFrames = audioTrack.getPlaybackHeadPosition();
+                            int offset = 0;
+                            while (offset < count && !stopped.get()) {
+                                waitIfPaused();
+                                int written = audioTrack.write(processed, offset, count - offset);
+                                if (written < 0) throw new IOException("AudioTrack write failed: " + written);
+                                if (written == 0) throw new IOException("AudioTrack returned zero bytes");
+                                offset += written;
+                                outputFramesWritten += written / (2L * channels);
+                            }
+                            long playedFrames = audioTrack.getPlaybackHeadPosition() & 0xffffffffL;
                             if (outputFramesWritten > 0 && sourceFramesSubmitted > 0) {
                                 positionMs = startMs + (int)(playedFrames * sourceFramesSubmitted * 1000L /
                                         (outputFramesWritten * (long)sampleRate));
@@ -223,8 +229,13 @@ public final class SonicAudioPlayer {
                         int count;
                         while ((count = sonic.readBytesFromStream(processed, processed.length)) > 0 && !stopped.get()) {
                             waitIfPaused();
-                            int flushed = audioTrack.write(processed, 0, count);
-                            if (flushed < 0) throw new IOException("AudioTrack flush write failed: " + flushed);
+                            int offset = 0;
+                            while (offset < count && !stopped.get()) {
+                                int flushed = audioTrack.write(processed, offset, count - offset);
+                                if (flushed < 0) throw new IOException("AudioTrack flush write failed: " + flushed);
+                                if (flushed == 0) throw new IOException("AudioTrack returned zero bytes");
+                                offset += flushed;
+                            }
                         }
                         outputDone = true;
                     }
