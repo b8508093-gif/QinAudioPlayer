@@ -14,6 +14,7 @@ import android.view.KeyEvent;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.SimpleAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -21,6 +22,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends Activity {
     private static volatile MainActivity activeInstance;
@@ -214,6 +217,7 @@ public class MainActivity extends Activity {
         screenPage = 2;
         historyFolders = new ArrayList<>();
         itemNames = new ArrayList<>();
+        List<Map<String, String>> rows = new ArrayList<>();
         String raw = prefs.getString("folder_history_v2", "");
         for (String path : raw.split("\\n")) {
             if (path.length() == 0) continue;
@@ -225,16 +229,22 @@ public class MainActivity extends Activity {
             int pos = trackPath.length() == 0 ? 0 : prefs.getInt(trackPath + "_pos", 0);
             float speed = prefs.getFloat(key + "_speed", 1.0f);
             historyFolders.add(folder);
-            itemNames.add(folder.getName() + "  |  " +
-                    (trackPath.length() == 0 ? "ללא רצועה אחרונה" : track.getName()) +
-                    "  |  " + formatTime(pos) + "  |  ×" +
+            Map<String, String> row = new HashMap<>();
+            row.put("title", folder.getName());
+            row.put("subtitle", (trackPath.length() == 0 ? "ללא רצועה אחרונה" : track.getName()) +
+                    "   •   " + formatTime(pos) + "   •   ×" +
                     String.format(java.util.Locale.US, "%.1f", speed));
+            rows.add(row);
         }
         fileList = new ArrayList<>(historyFolders);
         txtHeader.setText("היסטוריה – תיקיות שמע אחרונות");
         listView.setVisibility(android.view.View.VISIBLE);
         progressBar.setVisibility(android.view.View.GONE);
-        setListAdapter();
+        listView.setAdapter(new SimpleAdapter(this, rows, android.R.layout.simple_list_item_2,
+                new String[]{"title", "subtitle"},
+                new int[]{android.R.id.text1, android.R.id.text2}));
+        if (!rows.isEmpty()) listView.setSelection(0);
+        listView.requestFocus();
     }
 
     private void rememberFolder(File folder, File track) {
