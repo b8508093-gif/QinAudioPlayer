@@ -386,6 +386,7 @@ public class MainActivity extends Activity {
 
     private void resumeWithSmartJump() {
         if (audioPlayer != null && !isPlaying) {
+            audioManager.requestAudioFocus(audioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
             audioPlayer.resume();
             isPlaying = true;
             PlaybackKeepAliveService.start(this, currentAudioFile == null ? null : currentAudioFile.getName());
