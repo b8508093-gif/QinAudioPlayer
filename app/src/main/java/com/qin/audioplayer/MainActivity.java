@@ -58,6 +58,16 @@ public class MainActivity extends Activity {
 
     private SharedPreferences prefs;
     private final Handler handler = new Handler();
+    private final Runnable uiRefresh = new Runnable() {
+        @Override public void run() {
+            if (audioPlayer == null || currentAudioFile == null || txtTime == null) return;
+            int pos = audioPlayer.getPositionMs();
+            txtTime.setText(formatTime(pos) + " / " + formatTime(currentDurationMs));
+            txtSpeed.setText("מהירות: " + String.format(java.util.Locale.US, "%.1fx", currentSpeed));
+            if (currentDurationMs > 0) progressBar.setProgress((int)Math.max(0, Math.min(1000, 1000L * pos / currentDurationMs)));
+            handler.postDelayed(this, 500);
+        }
+    };
     private AudioManager audioManager;
     private final AudioManager.OnAudioFocusChangeListener audioFocusListener =
             new AudioManager.OnAudioFocusChangeListener() {
@@ -93,6 +103,21 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        MainActivity previous = activeInstance;
+        if (previous != null && previous.audioPlayer != null) {
+            audioPlayer = previous.audioPlayer;
+            currentAudioFile = previous.currentAudioFile;
+            playbackDir = previous.playbackDir;
+            currentDir = previous.currentDir;
+            currentSpeed = previous.currentSpeed;
+            currentDurationMs = previous.currentDurationMs;
+            isPlaying = previous.isPlaying;
+            recursiveQueue = previous.recursiveQueue;
+            recursiveRoot = previous.recursiveRoot;
+            abStartMs = previous.abStartMs;
+            abEndMs = previous.abEndMs;
+            screenPage = 1;
+        }
         activeInstance = this;
         setContentView(R.layout.activity_main);
 
@@ -124,7 +149,13 @@ public class MainActivity extends Activity {
             }
         }, PhoneStateListener.LISTEN_CALL_STATE);
 
-        loadStorageRoots();
+        if (audioPlayer != null && currentAudioFile != null) {
+            showPlayerPage();
+            txtTime.setText(formatTime(audioPlayer.getPositionMs()) + " / " + formatTime(currentDurationMs));
+            handler.post(uiRefresh);
+        } else {
+            loadStorageRoots();
+        }
         listView.setOnItemClickListener((parent, view, position, id) -> activatePosition(position));
     }
 
@@ -346,6 +377,8 @@ public class MainActivity extends Activity {
                 }
             });
             audioPlayer.start(savedPos);
+            handler.removeCallbacks(uiRefresh);
+            handler.post(uiRefresh);
             abLoopRestarting = false;
             isPlaying = true;
             PlaybackKeepAliveService.start(this, file.getName());
@@ -599,7 +632,12 @@ public class MainActivity extends Activity {
         activatePosition(position);
     }
 
+    @Override public void onBackPressed() {
+        moveTaskToBack(true);
+    }
+
     @Override protected void onDestroy() {
+        handler.removeCallbacks(uiRefresh);
         saveCurrentPosition();
         // The foreground service and playback worker continue after the UI is closed.
         super.onDestroy();
