@@ -464,8 +464,14 @@ public class MainActivity extends Activity {
 
     private void restartAtPosition(int positionMs) {
         if (currentAudioFile == null) return;
+        boolean shouldResume = isPlaying;
         forcedStartPosition = Math.max(0, positionMs);
         playAudioFile(currentAudioFile);
+        if (!shouldResume && audioPlayer != null) {
+            audioPlayer.pause();
+            isPlaying = false;
+            PlaybackKeepAliveService.pause(this);
+        }
     }
 
     private void markABPoint() {
@@ -529,7 +535,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_POUND:
                 if (screenPage == 0) showPlayerPage();
                 else if (screenPage == 1) showHistoryPage();
-                else if (isPlaying && playbackDir != null && playbackDir.exists()) loadDirectory(playbackDir);
+                else if (playbackDir != null && playbackDir.exists()) loadDirectory(playbackDir);
                 else if (currentDir != null && currentDir.exists()) loadDirectory(currentDir);
                 else loadStorageRoots();
                 return true;
