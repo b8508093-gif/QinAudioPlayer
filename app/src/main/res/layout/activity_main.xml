@@ -4,7 +4,10 @@
     android:layout_height="match_parent"
     android:background="#000000"
     android:orientation="vertical"
-    android:padding="6dp"
+    android:paddingLeft="2dp"
+    android:paddingRight="2dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
     android:layoutDirection="rtl"
     android:textDirection="rtl">
 
@@ -14,7 +17,7 @@
         android:layout_height="wrap_content"
         android:text="נגן שמע - סייר תיקיות"
         android:textColor="#00FFCC"
-        android:textSize="14sp"
+        android:textSize="18sp"
         android:textStyle="bold"
         android:gravity="center"
         android:paddingBottom="4dp" />
@@ -25,7 +28,7 @@
         android:layout_height="wrap_content"
         android:text="לא נבחר קובץ"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
+        android:textSize="16sp"
         android:maxLines="2"
         android:ellipsize="end"
         android:paddingBottom="4dp" />
@@ -42,7 +45,7 @@
             android:layout_height="wrap_content"
             android:text="00:00 / 00:00"
             android:textColor="#AAAAAA"
-            android:textSize="11sp" />
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/txtSpeed"
@@ -50,16 +53,17 @@
             android:layout_height="wrap_content"
             android:text="מהירות: 1.0x"
             android:textColor="#FFFF00"
-            android:textSize="11sp" />
+            android:textSize="14sp" />
     </LinearLayout>
 
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="8dp"
+        android:layout_height="12dp"
         android:max="1000"
         android:progress="0"
+        android:layoutDirection="ltr"
         android:visibility="gone" />
 
     <ListView
@@ -76,8 +80,8 @@
         android:layout_height="wrap_content"
         android:text="5:נגן/השהה | *:בחירה | #:מסכים | 2/8:ניווט/עוצמה | 4/6:קודם/הבא | 7/9:מהירות עד ×5"
         android:textColor="#777777"
-        android:textSize="9sp"
+        android:textSize="11sp"
         android:gravity="center"
-        android:paddingTop="2dp" />
+        android:paddingTop="4dp" />
 
 </LinearLayout>
